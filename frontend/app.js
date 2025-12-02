@@ -1233,6 +1233,12 @@ window.confirmPurchase = async function() {
     return;
   }
 
+  if (!currentUser || !currentUser.customerID) {
+    alert('User session error. Please log in again.');
+    showLandingPage();
+    return;
+  }
+
   const confirmBtn = document.getElementById('confirmPurchaseBtn');
   const messageDiv = document.getElementById('checkoutMessage');
   
@@ -1284,11 +1290,17 @@ window.confirmPurchase = async function() {
     }
 
     // Step 3: Create Transaction
+    // Format date as YYYY-MM-DD for MySQL date type
+    const today = new Date();
+    const dateString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
     const transaction = {
       transactionID: 0,
-      dateOfTransaction: new Date().toISOString(),
+      dateOfTransaction: dateString + 'T00:00:00', // Add time component for .NET DateTime parsing
       customerID: currentUser.customerID
     };
+    
+    console.log('Creating transaction:', transaction); // Debug log
 
     const transactionResponse = await fetch(`${API_BASE_URL}/transactions`, {
       method: 'POST',
@@ -1299,8 +1311,14 @@ window.confirmPurchase = async function() {
     });
 
     if (!transactionResponse.ok) {
-      const errorData = await transactionResponse.json();
-      throw new Error(errorData.message || 'Failed to create transaction');
+      let errorMessage = 'Failed to create transaction';
+      try {
+        const errorData = await transactionResponse.json();
+        errorMessage = errorData.message || errorData.error || errorMessage;
+      } catch (e) {
+        errorMessage = `Server returned status ${transactionResponse.status}`;
+      }
+      throw new Error(errorMessage);
     }
 
     const createdTransaction = await transactionResponse.json();
