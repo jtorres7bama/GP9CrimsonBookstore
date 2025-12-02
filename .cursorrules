@@ -18,10 +18,10 @@
 - **Architecture**: RESTful API design with proper HTTP methods and status codes
 
 ## Database
-- **Type**: SQL database
+- **Type**: MySQL database (hosted on Heroku)
 - **Data Access**: Write SQL queries directly, no ORM
-- **File Location**: Store SQL database file in the `/api` folder
-- **Connection String**: Store in `appsettings.json` for simplicity (e.g., "Data Source=./api/database.db")
+- **Connection**: Remote MySQL database connection
+- **Connection String**: Store in `appsettings.json` for simplicity (e.g., "Server=host;Database=dbname;User Id=user;Password=pass;")
 
 ## Project Structure Guidelines
 - Keep frontend and backend in separate folders/directories
@@ -40,13 +40,13 @@
 ## File Organization
 - Frontend files: Single `index.html` file with JavaScript files in a dedicated frontend folder
 - Backend files: C# project files in a dedicated backend folder
-- Database: SQLite file in the `/api` folder
+- Database: MySQL database hosted remotely (connection string in appsettings.json)
 - Documentation: Keep any documentation files in the project root
 
 ## Dependencies
 - Frontend: Only Bootstrap from CDN, no npm/node_modules
 - Backend: Use NuGet packages as needed for .NET dependencies
-- Database: Microsoft.Data.Sqlite package for direct SQL access
+- Database: MySqlConnector package for direct SQL access to MySQL database
 
 ## Code Style
 - Use consistent indentation (2 spaces for HTML/CSS/JS, 4 spaces for C#)
