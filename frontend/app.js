@@ -9,10 +9,30 @@ let currentUser = null;
 
 // Initialize app
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', setupEventListeners);
+  document.addEventListener('DOMContentLoaded', initializeApp);
 } else {
   // DOM is already loaded
-  setupEventListeners();
+  initializeApp();
+}
+
+// Initialize app and check for existing session
+function initializeApp() {
+  // Check if user is already logged in
+  const savedUser = sessionStorage.getItem('currentUser');
+  if (savedUser) {
+    try {
+      currentUser = JSON.parse(savedUser);
+      // User is logged in, show home page
+      showHomePageInternal();
+    } catch (error) {
+      console.error('Error parsing saved user:', error);
+      sessionStorage.removeItem('currentUser');
+      setupEventListeners();
+    }
+  } else {
+    // No user session, show landing page
+    setupEventListeners();
+  }
 }
 
 // Setup event listeners
@@ -115,9 +135,19 @@ function showLoginForm() {
   form.addEventListener('submit', handleLogin);
 }
 
+// Logout function (global function)
+window.logout = function() {
+  // Clear current user session
+  currentUser = null;
+  sessionStorage.removeItem('currentUser');
+  
+  // Show landing page
+  showLandingPage();
+};
+
 // Show landing page (global function for onclick handlers)
 window.showLandingPage = function() {
-  // Clear current user session
+  // Clear current user session if not already cleared
   currentUser = null;
   sessionStorage.removeItem('currentUser');
   
@@ -624,6 +654,7 @@ window.addHeader = function() {
               </svg>
               Shopping Cart
             </button>
+            <button type="button" class="btn btn-outline-light" onclick="logout()">Logout</button>
           </div>
         </div>
       </div>
