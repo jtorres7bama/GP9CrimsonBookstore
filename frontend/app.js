@@ -616,10 +616,173 @@ function displayBooks() {
   }).join('');
 }
 
-// Show book detail page (placeholder for now)
-window.showBookDetail = function(isbn) {
+// Show book detail page
+window.showBookDetail = async function(isbn) {
+  // Add header
+  addHeader();
+  
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <div id="bookDetailContainer">
+            <div class="text-center">
+              <div class="spinner-border text-danger" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading book details...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Load book details
+  await loadBookDetail(isbn);
+};
+
+// Load book detail data
+async function loadBookDetail(isbn) {
+  try {
+    // Fetch book details
+    const bookResponse = await fetch(`${API_BASE_URL}/books/${isbn}`);
+    if (!bookResponse.ok) {
+      throw new Error('Book not found');
+    }
+    const book = await bookResponse.json();
+
+    // Fetch authors for this book
+    const authorsResponse = await fetch(`${API_BASE_URL}/authors/book/${isbn}`);
+    const authors = authorsResponse.ok ? await authorsResponse.json() : [];
+
+    // Fetch available copies (excluding sold)
+    const copiesResponse = await fetch(`${API_BASE_URL}/bookcopy/book/${isbn}`);
+    const allCopies = copiesResponse.ok ? await copiesResponse.json() : [];
+    const availableCopies = allCopies.filter(c => c.copyStatus !== 'Sold');
+
+    // Display book details
+    displayBookDetail(book, authors, availableCopies);
+  } catch (error) {
+    console.error('Error loading book detail:', error);
+    const container = document.getElementById('bookDetailContainer');
+    if (container) {
+      container.innerHTML = `
+        <div class="alert alert-danger" role="alert">
+          Error loading book details. Please try again later.
+        </div>
+        <button type="button" class="btn btn-secondary mt-3" onclick="showHomePage()">Back to Home</button>
+      `;
+    }
+  }
+}
+
+// Display book detail information
+function displayBookDetail(book, authors, availableCopies) {
+  const container = document.getElementById('bookDetailContainer');
+  
+  const authorsList = authors.length > 0 
+    ? authors.map(a => `${a.authorFName} ${a.authorLName}`).join(', ')
+    : 'Unknown Author';
+
+  const priceRange = availableCopies.length > 0
+    ? (() => {
+        const prices = availableCopies.map(c => c.price).filter(p => p > 0);
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
+        return minPrice === maxPrice ? `$${minPrice}` : `$${minPrice} - $${maxPrice}`;
+      })()
+    : 'No copies available';
+
+  container.innerHTML = `
+    <div class="row">
+      <div class="col-md-8">
+        <div class="card shadow">
+          <div class="card-body">
+            <h2 class="card-title mb-4">${escapeHtml(book.bookTitle)}</h2>
+            
+            <div class="mb-3">
+              <h5>Author(s)</h5>
+              <p class="text-muted">${escapeHtml(authorsList)}</p>
+            </div>
+
+            <div class="mb-3">
+              <h5>ISBN</h5>
+              <p class="text-muted">${book.isbn}</p>
+            </div>
+
+            <div class="mb-3">
+              <h5>Course</h5>
+              <p class="text-muted">${escapeHtml(book.course)}</p>
+            </div>
+
+            <div class="mb-3">
+              <h5>Major</h5>
+              <p class="text-muted">${escapeHtml(book.major)}</p>
+            </div>
+
+            <div class="mb-3">
+              <h5>Price Range</h5>
+              <p class="text-muted fs-5 fw-bold text-danger">${priceRange}</p>
+            </div>
+
+            <div class="mb-3">
+              <h5>Available Copies</h5>
+              ${availableCopies.length > 0 ? `
+                <div class="table-responsive">
+                  <table class="table table-striped">
+                    <thead>
+                      <tr>
+                        <th>Edition</th>
+                        <th>Year Printed</th>
+                        <th>Condition</th>
+                        <th>Price</th>
+                        <th>Date Added</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${availableCopies.map(copy => `
+                        <tr>
+                          <td>${copy.bookEdition}</td>
+                          <td>${copy.yearPrinted}</td>
+                          <td><span class="badge bg-info">${escapeHtml(copy.conditions)}</span></td>
+                          <td>$${copy.price}</td>
+                          <td>${new Date(copy.dateAdded).toLocaleDateString()}</td>
+                          <td><span class="badge bg-success">${escapeHtml(copy.copyStatus)}</span></td>
+                          <td>
+                            <button type="button" class="btn btn-danger btn-sm" onclick="addToCart(${copy.copyID}, '${book.isbn}')">
+                              Add to Cart
+                            </button>
+                          </td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              ` : `
+                <p class="text-muted">No copies currently available</p>
+              `}
+            </div>
+
+            <div class="mt-4">
+              <button type="button" class="btn btn-outline-secondary btn-lg" onclick="showHomePage()">
+                Back to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Add to cart function
+window.addToCart = function(copyID, isbn) {
   // This will be implemented later
-  alert(`Book detail page for ISBN: ${isbn} - Coming soon!`);
+  alert(`Added copy ID ${copyID} (ISBN: ${isbn}) to cart - Coming soon!`);
 };
 
 // Escape HTML to prevent XSS
