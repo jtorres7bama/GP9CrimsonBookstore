@@ -196,7 +196,12 @@ async function handleRegister(e) {
       body: JSON.stringify(customer)
     });
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (jsonError) {
+      throw new Error(`Server returned invalid response. Status: ${response.status}`);
+    }
 
     if (response.ok) {
       showMessage(`Registration successful! Welcome, ${data.customerName}. Your Customer ID is: ${data.customerID}`, 'success');
@@ -206,8 +211,9 @@ async function handleRegister(e) {
       showMessage(data.message || 'Registration failed. Please try again.', 'danger');
     }
   } catch (error) {
-    showMessage('Error connecting to server. Please make sure the API is running.', 'danger');
     console.error('Registration error:', error);
+    const errorMsg = error.message || 'Error connecting to server. Please make sure the API is running on http://localhost:5000';
+    showMessage(errorMsg, 'danger');
   } finally {
     // Restore button state
     const submitBtn = document.querySelector('#registerForm button[type="submit"]');
@@ -243,7 +249,13 @@ async function handleLogin(e) {
 
     // Get all customers to find matching email and password
     const response = await fetch(`${API_BASE_URL}/customers`);
-    const customers = await response.json();
+
+    let customers;
+    try {
+      customers = await response.json();
+    } catch (jsonError) {
+      throw new Error(`Server returned invalid response. Status: ${response.status}. Make sure the API is running on http://localhost:5000`);
+    }
 
     if (response.ok) {
       // Find customer with matching email and password
@@ -258,11 +270,12 @@ async function handleLogin(e) {
         showLoginMessage('Invalid email or password', 'danger');
       }
     } else {
-      showLoginMessage('Error connecting to server', 'danger');
+      showLoginMessage(`Server error: ${response.status}. ${customers?.message || ''}`, 'danger');
     }
   } catch (error) {
-    showLoginMessage('Error connecting to server. Please make sure the API is running.', 'danger');
     console.error('Login error:', error);
+    const errorMsg = error.message || 'Error connecting to server. Please make sure the API is running on http://localhost:5000';
+    showLoginMessage(errorMsg, 'danger');
   } finally {
     // Restore button state
     const submitBtn = document.querySelector('#loginForm button[type="submit"]');
