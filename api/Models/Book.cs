@@ -6,7 +6,6 @@ public class Book
     public string BookTitle { get; set; } = string.Empty;
     public string Course { get; set; } = string.Empty;
     public string Major { get; set; } = string.Empty;
-    public int NumberOfCopies { get; set; }
     public string? ImageURL { get; set; }
 }
 

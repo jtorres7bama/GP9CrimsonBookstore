@@ -47,14 +47,13 @@ public class TestController : ControllerBase
         try
         {
             var books = await _db.QueryAsync(
-                "SELECT ISBN, BookTitle, Course, Major, NumberOfCopies, ImageURL FROM Books LIMIT 5",
+                "SELECT ISBN, BookTitle, Course, Major, ImageURL FROM Books LIMIT 5",
                 reader => new
                 {
                     isbn = reader.GetString(reader.GetOrdinal("ISBN")),
                     bookTitle = reader.GetString(reader.GetOrdinal("BookTitle")),
                     course = reader.GetString(reader.GetOrdinal("Course")),
                     major = reader.GetString(reader.GetOrdinal("Major")),
-                    numberOfCopies = reader.GetInt32(reader.GetOrdinal("NumberOfCopies")),
                     imageUrl = reader.IsDBNull(reader.GetOrdinal("ImageURL")) ? null : reader.GetString(reader.GetOrdinal("ImageURL"))
                 }
             );

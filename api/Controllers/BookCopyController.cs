@@ -23,7 +23,7 @@ public class BookCopyController : ControllerBase
         try
         {
             var copies = await _db.QueryAsync(
-                "SELECT CopyID, ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, Status FROM BookCopy ORDER BY CopyID",
+                "SELECT CopyID, ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, CopyStatus FROM BookCopy ORDER BY CopyID",
                 reader => new BookCopy
                 {
                     CopyID = reader.GetInt32(reader.GetOrdinal("CopyID")),
@@ -33,7 +33,7 @@ public class BookCopyController : ControllerBase
                     Price = reader.GetInt32(reader.GetOrdinal("Price")),
                     Conditions = reader.GetString(reader.GetOrdinal("Conditions")),
                     DateAdded = reader.GetDateTime(reader.GetOrdinal("DateAdded")),
-                    Status = reader.GetString(reader.GetOrdinal("Status"))
+                    CopyStatus = reader.GetString(reader.GetOrdinal("CopyStatus"))
                 }
             );
 
@@ -52,7 +52,7 @@ public class BookCopyController : ControllerBase
         try
         {
             var copies = await _db.QueryAsync(
-                "SELECT CopyID, ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, Status FROM BookCopy WHERE CopyID = @CopyID",
+                "SELECT CopyID, ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, CopyStatus FROM BookCopy WHERE CopyID = @CopyID",
                 reader => new BookCopy
                 {
                     CopyID = reader.GetInt32(reader.GetOrdinal("CopyID")),
@@ -62,7 +62,7 @@ public class BookCopyController : ControllerBase
                     Price = reader.GetInt32(reader.GetOrdinal("Price")),
                     Conditions = reader.GetString(reader.GetOrdinal("Conditions")),
                     DateAdded = reader.GetDateTime(reader.GetOrdinal("DateAdded")),
-                    Status = reader.GetString(reader.GetOrdinal("Status"))
+                    CopyStatus = reader.GetString(reader.GetOrdinal("CopyStatus"))
                 },
                 new { CopyID = copyId }
             );
@@ -87,7 +87,7 @@ public class BookCopyController : ControllerBase
         try
         {
             var copies = await _db.QueryAsync(
-                "SELECT CopyID, ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, Status FROM BookCopy WHERE ISBN = @ISBN ORDER BY CopyID",
+                "SELECT CopyID, ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, CopyStatus FROM BookCopy WHERE ISBN = @ISBN ORDER BY CopyID",
                 reader => new BookCopy
                 {
                     CopyID = reader.GetInt32(reader.GetOrdinal("CopyID")),
@@ -97,7 +97,7 @@ public class BookCopyController : ControllerBase
                     Price = reader.GetInt32(reader.GetOrdinal("Price")),
                     Conditions = reader.GetString(reader.GetOrdinal("Conditions")),
                     DateAdded = reader.GetDateTime(reader.GetOrdinal("DateAdded")),
-                    Status = reader.GetString(reader.GetOrdinal("Status"))
+                    CopyStatus = reader.GetString(reader.GetOrdinal("CopyStatus"))
                 },
                 new { ISBN = isbn }
             );
@@ -117,7 +117,7 @@ public class BookCopyController : ControllerBase
         try
         {
             var copies = await _db.QueryAsync(
-                "SELECT CopyID, ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, Status FROM BookCopy WHERE Status = @Status ORDER BY CopyID",
+                "SELECT CopyID, ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, CopyStatus FROM BookCopy WHERE CopyStatus = @CopyStatus ORDER BY CopyID",
                 reader => new BookCopy
                 {
                     CopyID = reader.GetInt32(reader.GetOrdinal("CopyID")),
@@ -127,9 +127,9 @@ public class BookCopyController : ControllerBase
                     Price = reader.GetInt32(reader.GetOrdinal("Price")),
                     Conditions = reader.GetString(reader.GetOrdinal("Conditions")),
                     DateAdded = reader.GetDateTime(reader.GetOrdinal("DateAdded")),
-                    Status = reader.GetString(reader.GetOrdinal("Status"))
+                    CopyStatus = reader.GetString(reader.GetOrdinal("CopyStatus"))
                 },
-                new { Status = status }
+                new { CopyStatus = status }
             );
 
             return Ok(copies);
@@ -146,13 +146,13 @@ public class BookCopyController : ControllerBase
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(bookCopy.ISBN) || string.IsNullOrWhiteSpace(bookCopy.Conditions) || string.IsNullOrWhiteSpace(bookCopy.Status))
+            if (string.IsNullOrWhiteSpace(bookCopy.ISBN) || string.IsNullOrWhiteSpace(bookCopy.Conditions) || string.IsNullOrWhiteSpace(bookCopy.CopyStatus))
             {
-                return BadRequest(new { message = "ISBN, Conditions, and Status are required" });
+                return BadRequest(new { message = "ISBN, Conditions, and CopyStatus are required" });
             }
 
             var rowsAffected = await _db.ExecuteAsync(
-                "INSERT INTO BookCopy (ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, Status) VALUES (@ISBN, @BookEdition, @YearPrinted, @Price, @Conditions, @DateAdded, @Status)",
+                "INSERT INTO BookCopy (ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, CopyStatus) VALUES (@ISBN, @BookEdition, @YearPrinted, @Price, @Conditions, @DateAdded, @CopyStatus)",
                 new
                 {
                     ISBN = bookCopy.ISBN,
@@ -161,7 +161,7 @@ public class BookCopyController : ControllerBase
                     Price = bookCopy.Price,
                     Conditions = bookCopy.Conditions,
                     DateAdded = bookCopy.DateAdded,
-                    Status = bookCopy.Status
+                    CopyStatus = bookCopy.CopyStatus
                 }
             );
 
@@ -169,7 +169,7 @@ public class BookCopyController : ControllerBase
             {
                 // Get the newly created copy with its ID
                 var newCopies = await _db.QueryAsync(
-                    "SELECT CopyID, ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, Status FROM BookCopy WHERE ISBN = @ISBN AND BookEdition = @BookEdition AND YearPrinted = @YearPrinted AND Price = @Price ORDER BY CopyID DESC LIMIT 1",
+                    "SELECT CopyID, ISBN, BookEdition, YearPrinted, Price, Conditions, DateAdded, CopyStatus FROM BookCopy WHERE ISBN = @ISBN AND BookEdition = @BookEdition AND YearPrinted = @YearPrinted AND Price = @Price ORDER BY CopyID DESC LIMIT 1",
                     reader => new BookCopy
                     {
                         CopyID = reader.GetInt32(reader.GetOrdinal("CopyID")),
@@ -179,7 +179,7 @@ public class BookCopyController : ControllerBase
                         Price = reader.GetInt32(reader.GetOrdinal("Price")),
                         Conditions = reader.GetString(reader.GetOrdinal("Conditions")),
                         DateAdded = reader.GetDateTime(reader.GetOrdinal("DateAdded")),
-                        Status = reader.GetString(reader.GetOrdinal("Status"))
+                        CopyStatus = reader.GetString(reader.GetOrdinal("CopyStatus"))
                     },
                     new
                     {
@@ -216,7 +216,7 @@ public class BookCopyController : ControllerBase
             }
 
             var rowsAffected = await _db.ExecuteAsync(
-                "UPDATE BookCopy SET ISBN = @ISBN, BookEdition = @BookEdition, YearPrinted = @YearPrinted, Price = @Price, Conditions = @Conditions, DateAdded = @DateAdded, Status = @Status WHERE CopyID = @CopyID",
+                "UPDATE BookCopy SET ISBN = @ISBN, BookEdition = @BookEdition, YearPrinted = @YearPrinted, Price = @Price, Conditions = @Conditions, DateAdded = @DateAdded, CopyStatus = @CopyStatus WHERE CopyID = @CopyID",
                 new
                 {
                     CopyID = copyId,
@@ -226,7 +226,7 @@ public class BookCopyController : ControllerBase
                     Price = bookCopy.Price,
                     Conditions = bookCopy.Conditions,
                     DateAdded = bookCopy.DateAdded,
-                    Status = bookCopy.Status
+                    CopyStatus = bookCopy.CopyStatus
                 }
             );
 

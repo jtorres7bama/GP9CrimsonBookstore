@@ -23,14 +23,13 @@ public class BooksController : ControllerBase
         try
         {
             var books = await _db.QueryAsync(
-                "SELECT ISBN, BookTitle, Course, Major, NumberOfCopies, ImageURL FROM Books ORDER BY BookTitle",
+                "SELECT ISBN, BookTitle, Course, Major, ImageURL FROM Books ORDER BY BookTitle",
                 reader => new Book
                 {
                     ISBN = reader.GetString(reader.GetOrdinal("ISBN")),
                     BookTitle = reader.GetString(reader.GetOrdinal("BookTitle")),
                     Course = reader.GetString(reader.GetOrdinal("Course")),
                     Major = reader.GetString(reader.GetOrdinal("Major")),
-                    NumberOfCopies = reader.GetInt32(reader.GetOrdinal("NumberOfCopies")),
                     ImageURL = reader.IsDBNull(reader.GetOrdinal("ImageURL")) ? null : reader.GetString(reader.GetOrdinal("ImageURL"))
                 }
             );
@@ -50,14 +49,13 @@ public class BooksController : ControllerBase
         try
         {
             var books = await _db.QueryAsync(
-                "SELECT ISBN, BookTitle, Course, Major, NumberOfCopies, ImageURL FROM Books WHERE ISBN = @ISBN",
+                "SELECT ISBN, BookTitle, Course, Major, ImageURL FROM Books WHERE ISBN = @ISBN",
                 reader => new Book
                 {
                     ISBN = reader.GetString(reader.GetOrdinal("ISBN")),
                     BookTitle = reader.GetString(reader.GetOrdinal("BookTitle")),
                     Course = reader.GetString(reader.GetOrdinal("Course")),
                     Major = reader.GetString(reader.GetOrdinal("Major")),
-                    NumberOfCopies = reader.GetInt32(reader.GetOrdinal("NumberOfCopies")),
                     ImageURL = reader.IsDBNull(reader.GetOrdinal("ImageURL")) ? null : reader.GetString(reader.GetOrdinal("ImageURL"))
                 },
                 new { ISBN = isbn }
@@ -88,14 +86,13 @@ public class BooksController : ControllerBase
             }
 
             var rowsAffected = await _db.ExecuteAsync(
-                "INSERT INTO Books (ISBN, BookTitle, Course, Major, NumberOfCopies, ImageURL) VALUES (@ISBN, @BookTitle, @Course, @Major, @NumberOfCopies, @ImageURL)",
+                "INSERT INTO Books (ISBN, BookTitle, Course, Major, ImageURL) VALUES (@ISBN, @BookTitle, @Course, @Major, @ImageURL)",
                 new
                 {
                     ISBN = book.ISBN,
                     BookTitle = book.BookTitle,
                     Course = book.Course,
                     Major = book.Major,
-                    NumberOfCopies = book.NumberOfCopies,
                     ImageURL = book.ImageURL
                 }
             );
@@ -125,14 +122,13 @@ public class BooksController : ControllerBase
             }
 
             var rowsAffected = await _db.ExecuteAsync(
-                "UPDATE Books SET BookTitle = @BookTitle, Course = @Course, Major = @Major, NumberOfCopies = @NumberOfCopies, ImageURL = @ImageURL WHERE ISBN = @ISBN",
+                "UPDATE Books SET BookTitle = @BookTitle, Course = @Course, Major = @Major, ImageURL = @ImageURL WHERE ISBN = @ISBN",
                 new
                 {
                     ISBN = isbn,
                     BookTitle = book.BookTitle,
                     Course = book.Course,
                     Major = book.Major,
-                    NumberOfCopies = book.NumberOfCopies,
                     ImageURL = book.ImageURL
                 }
             );

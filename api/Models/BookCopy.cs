@@ -9,6 +9,6 @@ public class BookCopy
     public int Price { get; set; }
     public string Conditions { get; set; } = string.Empty;
     public DateTime DateAdded { get; set; }
-    public string Status { get; set; } = string.Empty;
+    public string CopyStatus { get; set; } = string.Empty;
 }
 
