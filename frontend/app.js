@@ -454,9 +454,12 @@ async function loadBooks() {
       const bookAuthors = authors.filter(a => a.isbn === book.isbn);
       const bookCopies = copies.filter(c => c.isbn === book.isbn);
       
-      // Get lowest price and most recent date
-      const prices = bookCopies.map(c => c.price).filter(p => p > 0);
-      const dates = bookCopies.map(c => new Date(c.dateAdded)).filter(d => !isNaN(d.getTime()));
+      // Filter out sold copies for available count
+      const availableCopies = bookCopies.filter(c => c.copyStatus !== 'Sold');
+      
+      // Get lowest price and most recent date from available copies only
+      const prices = availableCopies.map(c => c.price).filter(p => p > 0);
+      const dates = availableCopies.map(c => new Date(c.dateAdded)).filter(d => !isNaN(d.getTime()));
       
       return {
         ...book,
@@ -464,7 +467,7 @@ async function loadBooks() {
         minPrice: prices.length > 0 ? Math.min(...prices) : null,
         maxPrice: prices.length > 0 ? Math.max(...prices) : null,
         latestDate: dates.length > 0 ? new Date(Math.max(...dates)) : null,
-        copyCount: bookCopies.length
+        copyCount: availableCopies.length
       };
     });
 
