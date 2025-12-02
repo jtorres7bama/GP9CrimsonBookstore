@@ -150,7 +150,33 @@ function showLoginForm() {
 }
 
 // Logout function (global function)
-window.logout = function() {
+window.logout = async function() {
+  // Release all reserved copies back to "In Store"
+  for (const item of shoppingCart) {
+    try {
+      const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${item.copyID}`);
+      if (copyResponse.ok) {
+        const copy = await copyResponse.json();
+        if (copy.copyStatus === 'Reserved') {
+          copy.copyStatus = 'In Store';
+          await fetch(`${API_BASE_URL}/bookcopy/${item.copyID}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(copy)
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error releasing reserved copy:', error);
+    }
+  }
+
+  // Clear cart
+  shoppingCart = [];
+  saveCart();
+
   // Clear current user session
   currentUser = null;
   sessionStorage.removeItem('currentUser');
@@ -828,6 +854,23 @@ window.addToCart = async function(copyID, isbn) {
       return;
     }
 
+    // Mark copy as "Reserved" if it's not already reserved
+    if (copy.copyStatus !== 'Reserved') {
+      copy.copyStatus = 'Reserved';
+      const updateResponse = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(copy)
+      });
+
+      if (!updateResponse.ok) {
+        alert('Error reserving copy. Please try again.');
+        return;
+      }
+    }
+
     // Fetch book details for display
     const bookResponse = await fetch(`${API_BASE_URL}/books/${isbn}`);
     const book = bookResponse.ok ? await bookResponse.json() : { bookTitle: 'Unknown', isbn: isbn };
@@ -1061,8 +1104,28 @@ window.updateQuantity = function(copyID, change) {
 };
 
 // Remove item from cart
-window.removeFromCart = function(copyID) {
+window.removeFromCart = async function(copyID) {
   if (confirm('Are you sure you want to remove this item from your cart?')) {
+    try {
+      // Get the copy and change status back to "In Store" if it was "Reserved"
+      const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`);
+      if (copyResponse.ok) {
+        const copy = await copyResponse.json();
+        if (copy.copyStatus === 'Reserved') {
+          copy.copyStatus = 'In Store';
+          await fetch(`${API_BASE_URL}/bookcopy/${copyID}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(copy)
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error updating copy status:', error);
+    }
+
     shoppingCart = shoppingCart.filter(item => item.copyID !== copyID);
     saveCart();
     addHeader(); // Refresh header to update cart count
@@ -1070,13 +1133,263 @@ window.removeFromCart = function(copyID) {
   }
 };
 
-// Checkout function (placeholder)
+// Show checkout page
 window.checkout = function() {
   if (shoppingCart.length === 0) {
     alert('Your cart is empty');
     return;
   }
-  alert('Checkout functionality coming soon!');
+  showCheckoutPage();
+};
+
+// Show checkout page
+function showCheckoutPage() {
+  // Add header
+  addHeader();
+  
+  const mainContent = app.querySelector('main');
+  
+  // Calculate totals
+  const subtotal = shoppingCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const total = subtotal;
+
+  const authorsList = shoppingCart.map(item => {
+    if (item.authors && item.authors.length > 0) {
+      return item.authors.map(a => `${a.authorFName} ${a.authorLName}`).join(', ');
+    }
+    return 'Unknown Author';
+  });
+
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <h2 class="mb-4">Checkout</h2>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-8">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title mb-4">Order Summary</h5>
+              ${shoppingCart.map((item, index) => `
+                <div class="card mb-3">
+                  <div class="card-body">
+                    <h6 class="mb-1">${escapeHtml(item.bookTitle)}</h6>
+                    <p class="text-muted small mb-2">
+                      <strong>Author(s):</strong> ${escapeHtml(authorsList[index])}<br>
+                      <strong>ISBN:</strong> ${item.isbn}<br>
+                      <strong>Edition:</strong> ${item.edition} | <strong>Year:</strong> ${item.yearPrinted}<br>
+                      <strong>Condition:</strong> <span class="badge bg-info">${escapeHtml(item.condition)}</span>
+                    </p>
+                    <div class="d-flex justify-content-between align-items-center">
+                      <span>Quantity: <strong>${item.quantity}</strong></span>
+                      <span class="fw-bold">$${(item.price * item.quantity).toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title mb-4">Order Total</h5>
+              <div class="d-flex justify-content-between mb-2">
+                <span>Subtotal:</span>
+                <span>$${subtotal.toFixed(2)}</span>
+              </div>
+              <hr>
+              <div class="d-flex justify-content-between mb-4">
+                <strong>Total:</strong>
+                <strong class="text-danger fs-5">$${total.toFixed(2)}</strong>
+              </div>
+              <button type="button" class="btn btn-danger btn-lg w-100" id="confirmPurchaseBtn" onclick="confirmPurchase()">
+                Confirm Purchase
+              </button>
+              <button type="button" class="btn btn-outline-secondary w-100 mt-2" onclick="showCartPage()">
+                Back to Cart
+              </button>
+              <div id="checkoutMessage" class="mt-3"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Confirm purchase
+window.confirmPurchase = async function() {
+  if (!currentUser) {
+    alert('Please log in to complete your purchase');
+    showLandingPage();
+    return;
+  }
+
+  if (shoppingCart.length === 0) {
+    alert('Your cart is empty');
+    return;
+  }
+
+  const confirmBtn = document.getElementById('confirmPurchaseBtn');
+  const messageDiv = document.getElementById('checkoutMessage');
+  
+  try {
+    // Disable button and show loading
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = 'Processing...';
+    messageDiv.innerHTML = '';
+
+    // Step 1: Validate stock atomically - check all copies are still available
+    const validationErrors = [];
+    for (const item of shoppingCart) {
+      try {
+        const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${item.copyID}`);
+        if (!copyResponse.ok) {
+          validationErrors.push(`${item.bookTitle} - Copy not found`);
+          continue;
+        }
+        const copy = await copyResponse.json();
+        if (copy.copyStatus === 'Sold') {
+          validationErrors.push(`${item.bookTitle} - Copy is already sold`);
+        }
+      } catch (error) {
+        validationErrors.push(`${item.bookTitle} - Error validating`);
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      messageDiv.innerHTML = `
+        <div class="alert alert-danger" role="alert">
+          <strong>Validation Failed:</strong><br>
+          ${validationErrors.map(e => `• ${e}`).join('<br>')}<br><br>
+          Please return to your cart and remove unavailable items.
+        </div>
+      `;
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = 'Confirm Purchase';
+      return;
+    }
+
+    // Step 2: Get all staff to randomly assign
+    const staffResponse = await fetch(`${API_BASE_URL}/staffs`);
+    if (!staffResponse.ok) {
+      throw new Error('Failed to fetch staff');
+    }
+    const staffs = await staffResponse.json();
+    if (staffs.length === 0) {
+      throw new Error('No staff available to process order');
+    }
+
+    // Step 3: Create Transaction
+    const transaction = {
+      transactionID: 0,
+      dateOfTransaction: new Date().toISOString(),
+      customerID: currentUser.customerID
+    };
+
+    const transactionResponse = await fetch(`${API_BASE_URL}/transactions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(transaction)
+    });
+
+    if (!transactionResponse.ok) {
+      const errorData = await transactionResponse.json();
+      throw new Error(errorData.message || 'Failed to create transaction');
+    }
+
+    const createdTransaction = await transactionResponse.json();
+
+    // Step 4: Create OrderLineItems and update copy status
+    const orderResults = [];
+    for (const item of shoppingCart) {
+      // Randomly assign staff
+      const randomStaff = staffs[Math.floor(Math.random() * staffs.length)];
+
+      // Create OrderLineItem
+      const orderItem = {
+        orderID: 0,
+        transactionID: createdTransaction.transactionID,
+        copyID: item.copyID,
+        orderStatus: 'Fulfilled',
+        staffID: randomStaff.staffID
+      };
+
+      const orderResponse = await fetch(`${API_BASE_URL}/orderlineitems`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(orderItem)
+      });
+
+      if (!orderResponse.ok) {
+        const errorData = await orderResponse.json();
+        throw new Error(`Failed to create order for ${item.bookTitle}: ${errorData.message || 'Unknown error'}`);
+      }
+
+      // Update copy status to "Sold"
+      const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${item.copyID}`);
+      if (!copyResponse.ok) {
+        throw new Error(`Failed to fetch copy ${item.copyID}`);
+      }
+      const copy = await copyResponse.json();
+
+      copy.copyStatus = 'Sold';
+
+      const updateResponse = await fetch(`${API_BASE_URL}/bookcopy/${item.copyID}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(copy)
+      });
+
+      if (!updateResponse.ok) {
+        throw new Error(`Failed to update copy status for ${item.bookTitle}`);
+      }
+
+      orderResults.push({
+        book: item.bookTitle,
+        success: true
+      });
+    }
+
+    // Step 5: Clear cart and show success
+    shoppingCart = [];
+    saveCart();
+    addHeader(); // Refresh header to update cart count
+
+    messageDiv.innerHTML = `
+      <div class="alert alert-success" role="alert">
+        <h5>Purchase Confirmed!</h5>
+        <p>Your order has been successfully processed.</p>
+        <p><strong>Transaction ID:</strong> ${createdTransaction.transactionID}</p>
+        <p>Thank you for your purchase!</p>
+      </div>
+    `;
+
+    // Clear cart display after 3 seconds and redirect to home
+    setTimeout(() => {
+      showHomePageInternal();
+    }, 3000);
+
+  } catch (error) {
+    console.error('Purchase error:', error);
+    messageDiv.innerHTML = `
+      <div class="alert alert-danger" role="alert">
+        <strong>Error processing purchase:</strong><br>
+        ${error.message || 'An unexpected error occurred. Please try again.'}
+      </div>
+    `;
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = 'Confirm Purchase';
+  }
 };
 
 // Escape HTML to prevent XSS
