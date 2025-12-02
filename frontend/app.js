@@ -7,6 +7,9 @@ const app = document.getElementById('app');
 // Current user session
 let currentUser = null;
 
+// Shopping cart
+let shoppingCart = [];
+
 // Initialize app
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initializeApp);
@@ -17,6 +20,17 @@ if (document.readyState === 'loading') {
 
 // Initialize app and check for existing session
 function initializeApp() {
+  // Load cart from sessionStorage
+  const savedCart = sessionStorage.getItem('shoppingCart');
+  if (savedCart) {
+    try {
+      shoppingCart = JSON.parse(savedCart);
+    } catch (error) {
+      console.error('Error parsing saved cart:', error);
+      shoppingCart = [];
+    }
+  }
+
   // Check if user is already logged in
   const savedUser = sessionStorage.getItem('currentUser');
   if (savedUser) {
@@ -780,9 +794,289 @@ function displayBookDetail(book, authors, availableCopies) {
 }
 
 // Add to cart function
-window.addToCart = function(copyID, isbn) {
-  // This will be implemented later
-  alert(`Added copy ID ${copyID} (ISBN: ${isbn}) to cart - Coming soon!`);
+window.addToCart = async function(copyID, isbn) {
+  try {
+    // Check if item is already in cart
+    const existingItem = shoppingCart.find(item => item.copyID === copyID);
+    
+    if (existingItem) {
+      // Item already in cart, increase quantity if available
+      const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`);
+      if (copyResponse.ok) {
+        const copy = await copyResponse.json();
+        if (copy.copyStatus === 'Sold') {
+          alert('This copy is no longer available');
+          return;
+        }
+        // Quantity is already 1, can't add more of the same copy
+        alert('This copy is already in your cart');
+        return;
+      }
+    }
+
+    // Fetch copy details
+    const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`);
+    if (!copyResponse.ok) {
+      alert('Error adding item to cart');
+      return;
+    }
+    const copy = await copyResponse.json();
+
+    // Check if copy is available
+    if (copy.copyStatus === 'Sold') {
+      alert('This copy is no longer available');
+      return;
+    }
+
+    // Fetch book details for display
+    const bookResponse = await fetch(`${API_BASE_URL}/books/${isbn}`);
+    const book = bookResponse.ok ? await bookResponse.json() : { bookTitle: 'Unknown', isbn: isbn };
+
+    // Fetch authors
+    const authorsResponse = await fetch(`${API_BASE_URL}/authors/book/${isbn}`);
+    const authors = authorsResponse.ok ? await authorsResponse.json() : [];
+
+    // Add to cart
+    const cartItem = {
+      copyID: copy.copyID,
+      isbn: isbn,
+      bookTitle: book.bookTitle,
+      authors: authors,
+      edition: copy.bookEdition,
+      yearPrinted: copy.yearPrinted,
+      condition: copy.conditions,
+      price: copy.price,
+      quantity: 1,
+      maxQuantity: 1 // Each copy can only be added once
+    };
+
+    shoppingCart.push(cartItem);
+    saveCart();
+    
+    // Refresh header to update cart count
+    addHeader();
+    
+    // Show success message
+    alert(`Added "${book.bookTitle}" to cart!`);
+  } catch (error) {
+    console.error('Error adding to cart:', error);
+    alert('Error adding item to cart. Please try again.');
+  }
+};
+
+// Save cart to sessionStorage
+function saveCart() {
+  sessionStorage.setItem('shoppingCart', JSON.stringify(shoppingCart));
+}
+
+// Show shopping cart page
+window.showCartPage = async function() {
+  // Add header
+  addHeader();
+  
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <h2 class="mb-4">Shopping Cart</h2>
+          <div id="cartContainer">
+            <div class="text-center">
+              <div class="spinner-border text-danger" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading cart...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Load and display cart
+  await loadAndDisplayCart();
+};
+
+// Load and display cart items
+async function loadAndDisplayCart() {
+  const container = document.getElementById('cartContainer');
+
+  if (shoppingCart.length === 0) {
+    container.innerHTML = `
+      <div class="alert alert-info" role="alert">
+        Your cart is empty.
+      </div>
+      <button type="button" class="btn btn-outline-secondary mt-3" onclick="showHomePage()">
+        Continue Shopping
+      </button>
+    `;
+    return;
+  }
+
+  // Verify items are still available and update cart
+  const verifiedCart = [];
+  for (const item of shoppingCart) {
+    try {
+      const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${item.copyID}`);
+      if (copyResponse.ok) {
+        const copy = await copyResponse.json();
+        if (copy.copyStatus !== 'Sold') {
+          verifiedCart.push(item);
+        }
+      }
+    } catch (error) {
+      console.error('Error verifying cart item:', error);
+    }
+  }
+
+  // Update cart if items were removed
+  if (verifiedCart.length !== shoppingCart.length) {
+    shoppingCart = verifiedCart;
+    saveCart();
+  }
+
+  displayCart();
+}
+
+// Display cart items
+function displayCart() {
+  const container = document.getElementById('cartContainer');
+  
+  if (shoppingCart.length === 0) {
+    container.innerHTML = `
+      <div class="alert alert-info" role="alert">
+        Your cart is empty.
+      </div>
+      <button type="button" class="btn btn-outline-secondary mt-3" onclick="showHomePage()">
+        Continue Shopping
+      </button>
+    `;
+    return;
+  }
+
+  // Calculate totals
+  const subtotal = shoppingCart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const total = subtotal; // No tax/shipping for now
+
+  const authorsList = shoppingCart.map(item => {
+    if (item.authors && item.authors.length > 0) {
+      return item.authors.map(a => `${a.authorFName} ${a.authorLName}`).join(', ');
+    }
+    return 'Unknown Author';
+  });
+
+  container.innerHTML = `
+    <div class="row">
+      <div class="col-md-8">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title mb-4">Cart Items</h5>
+            ${shoppingCart.map((item, index) => `
+              <div class="card mb-3" id="cartItem-${item.copyID}">
+                <div class="card-body">
+                  <div class="row align-items-center">
+                    <div class="col-md-6">
+                      <h6 class="mb-1">${escapeHtml(item.bookTitle)}</h6>
+                      <p class="text-muted small mb-1">
+                        <strong>Author(s):</strong> ${escapeHtml(authorsList[index])}<br>
+                        <strong>ISBN:</strong> ${item.isbn}<br>
+                        <strong>Edition:</strong> ${item.edition}<br>
+                        <strong>Year:</strong> ${item.yearPrinted}<br>
+                        <strong>Condition:</strong> <span class="badge bg-info">${escapeHtml(item.condition)}</span>
+                      </p>
+                    </div>
+                    <div class="col-md-2 text-center">
+                      <label class="form-label small">Quantity</label>
+                      <div class="input-group input-group-sm">
+                        <button class="btn btn-outline-secondary" type="button" onclick="updateQuantity(${item.copyID}, -1)">-</button>
+                        <input type="number" class="form-control text-center" id="qty-${item.copyID}" value="${item.quantity}" min="1" max="${item.maxQuantity}" readonly>
+                        <button class="btn btn-outline-secondary" type="button" onclick="updateQuantity(${item.copyID}, 1)">+</button>
+                      </div>
+                      <small class="text-muted">Max: ${item.maxQuantity}</small>
+                    </div>
+                    <div class="col-md-2 text-center">
+                      <label class="form-label small">Price</label>
+                      <p class="mb-0 fw-bold">$${item.price.toFixed(2)}</p>
+                    </div>
+                    <div class="col-md-2 text-center">
+                      <label class="form-label small">Subtotal</label>
+                      <p class="mb-0 fw-bold text-danger">$${(item.price * item.quantity).toFixed(2)}</p>
+                      <button class="btn btn-sm btn-outline-danger mt-2" onclick="removeFromCart(${item.copyID})">
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title mb-4">Order Summary</h5>
+            <div class="d-flex justify-content-between mb-2">
+              <span>Subtotal:</span>
+              <span>$${subtotal.toFixed(2)}</span>
+            </div>
+            <hr>
+            <div class="d-flex justify-content-between mb-3">
+              <strong>Total:</strong>
+              <strong class="text-danger fs-5">$${total.toFixed(2)}</strong>
+            </div>
+            <button type="button" class="btn btn-danger btn-lg w-100" onclick="checkout()">
+              Checkout
+            </button>
+            <button type="button" class="btn btn-outline-secondary w-100 mt-2" onclick="showHomePage()">
+              Continue Shopping
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Update quantity
+window.updateQuantity = function(copyID, change) {
+  const item = shoppingCart.find(i => i.copyID === copyID);
+  if (!item) return;
+
+  const newQuantity = item.quantity + change;
+  
+  if (newQuantity < 1) {
+    removeFromCart(copyID);
+    return;
+  }
+
+  if (newQuantity > item.maxQuantity) {
+    alert(`Maximum quantity is ${item.maxQuantity}`);
+    return;
+  }
+
+  item.quantity = newQuantity;
+  saveCart();
+  displayCart();
+};
+
+// Remove item from cart
+window.removeFromCart = function(copyID) {
+  if (confirm('Are you sure you want to remove this item from your cart?')) {
+    shoppingCart = shoppingCart.filter(item => item.copyID !== copyID);
+    saveCart();
+    addHeader(); // Refresh header to update cart count
+    displayCart();
+  }
+};
+
+// Checkout function (placeholder)
+window.checkout = function() {
+  if (shoppingCart.length === 0) {
+    alert('Your cart is empty');
+    return;
+  }
+  alert('Checkout functionality coming soon!');
 };
 
 // Escape HTML to prevent XSS
@@ -804,6 +1098,7 @@ window.addHeader = function() {
   
   const header = app.querySelector('header');
   if (header) {
+    const cartCount = shoppingCart.length > 0 ? ` (${shoppingCart.length})` : '';
     header.innerHTML = `
       <div class="container">
         <div class="d-flex justify-content-between align-items-center">
@@ -811,11 +1106,11 @@ window.addHeader = function() {
           <div class="d-flex gap-2">
             <button type="button" class="btn btn-outline-light" onclick="showHomePage()">Home Page</button>
             <button type="button" class="btn btn-outline-light" id="orderHistoryBtn">Customer Order History</button>
-            <button type="button" class="btn btn-outline-light" id="cartBtn">
+            <button type="button" class="btn btn-outline-light" id="cartBtn" onclick="showCartPage()">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-cart" viewBox="0 0 16 16">
                 <path d="M0 1.5A.5.5 0 0 1 .5 1H2a.5.5 0 0 1 .485.379L2.89 3H14.5a.5.5 0 0 1 .491.592l-1.5 8A.5.5 0 0 1 13 12H4a.5.5 0 0 1-.491-.408L2.01 3.607 1.61 2H.5a.5.5 0 0 1-.5-.5zM3.102 4l1.313 7h8.17l1.313-7H3.102zM5 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
               </svg>
-              Shopping Cart
+              Shopping Cart${cartCount}
             </button>
             <button type="button" class="btn btn-outline-light" onclick="logout()">Logout</button>
           </div>
