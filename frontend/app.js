@@ -1410,6 +1410,202 @@ window.confirmPurchase = async function() {
   }
 };
 
+// Show order history page
+window.showOrderHistory = async function() {
+  if (!currentUser) {
+    alert('Please log in to view your order history');
+    showLandingPage();
+    return;
+  }
+
+  // Add header
+  addHeader();
+  
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <h2 class="mb-4">Order History</h2>
+          <div id="orderHistoryContainer">
+            <div class="text-center">
+              <div class="spinner-border text-danger" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading order history...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Load order history
+  await loadOrderHistory();
+};
+
+// Load order history for current customer
+async function loadOrderHistory() {
+  const container = document.getElementById('orderHistoryContainer');
+
+  try {
+    // Fetch all transactions for this customer
+    const transactionsResponse = await fetch(`${API_BASE_URL}/transactions/customer/${currentUser.customerID}`);
+    if (!transactionsResponse.ok) {
+      throw new Error('Failed to load transactions');
+    }
+    const transactions = await transactionsResponse.json();
+
+    if (transactions.length === 0) {
+      container.innerHTML = `
+        <div class="alert alert-info" role="alert">
+          You have no orders yet.
+        </div>
+        <button type="button" class="btn btn-outline-secondary mt-3" onclick="showHomePage()">
+          Start Shopping
+        </button>
+      `;
+      return;
+    }
+
+    // Fetch order line items for all transactions to get status
+    const ordersWithStatus = [];
+    for (const transaction of transactions) {
+      try {
+        const orderItemsResponse = await fetch(`${API_BASE_URL}/orderlineitems/transaction/${transaction.transactionID}`);
+        if (orderItemsResponse.ok) {
+          const orderItems = await orderItemsResponse.json();
+          
+          // Get the most common status (or first status if all same)
+          const statuses = orderItems.map(item => item.orderStatus);
+          const statusCounts = {};
+          statuses.forEach(status => {
+            statusCounts[status] = (statusCounts[status] || 0) + 1;
+          });
+          
+          // Get the most common status
+          let mostCommonStatus = statuses[0];
+          let maxCount = 0;
+          for (const [status, count] of Object.entries(statusCounts)) {
+            if (count > maxCount) {
+              maxCount = count;
+              mostCommonStatus = status;
+            }
+          }
+
+          ordersWithStatus.push({
+            transaction: transaction,
+            status: mostCommonStatus,
+            itemCount: orderItems.length
+          });
+        } else {
+          // If no order items found, still show transaction
+          ordersWithStatus.push({
+            transaction: transaction,
+            status: 'Unknown',
+            itemCount: 0
+          });
+        }
+      } catch (error) {
+        console.error('Error loading order items:', error);
+        ordersWithStatus.push({
+          transaction: transaction,
+          status: 'Unknown',
+          itemCount: 0
+        });
+      }
+    }
+
+    // Display orders
+    displayOrderHistory(ordersWithStatus);
+  } catch (error) {
+    console.error('Error loading order history:', error);
+    container.innerHTML = `
+      <div class="alert alert-danger" role="alert">
+        Error loading order history. Please try again later.
+      </div>
+      <button type="button" class="btn btn-outline-secondary mt-3" onclick="showHomePage()">
+        Back to Home
+      </button>
+    `;
+  }
+}
+
+// Display order history
+function displayOrderHistory(orders) {
+  const container = document.getElementById('orderHistoryContainer');
+
+  const getStatusBadgeClass = (status) => {
+    switch (status.toLowerCase()) {
+      case 'fulfilled':
+        return 'bg-success';
+      case 'processing':
+        return 'bg-warning';
+      case 'new':
+        return 'bg-info';
+      case 'cancelled':
+        return 'bg-danger';
+      default:
+        return 'bg-secondary';
+    }
+  };
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title mb-4">Your Orders</h5>
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead>
+              <tr>
+                <th>Transaction ID</th>
+                <th>Date</th>
+                <th>Items</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${orders.map(order => {
+                const date = new Date(order.transaction.dateOfTransaction);
+                const dateString = date.toLocaleDateString();
+                return `
+                  <tr style="cursor: pointer;" onclick="showOrderDetail(${order.transaction.transactionID})">
+                    <td>#${order.transaction.transactionID}</td>
+                    <td>${dateString}</td>
+                    <td>${order.itemCount} item(s)</td>
+                    <td>
+                      <span class="badge ${getStatusBadgeClass(order.status)}">
+                        ${escapeHtml(order.status)}
+                      </span>
+                    </td>
+                    <td>
+                      <button type="button" class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); showOrderDetail(${order.transaction.transactionID})">
+                        View Details
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-3">
+          <button type="button" class="btn btn-outline-secondary" onclick="showHomePage()">
+            Back to Home
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Show order detail page (placeholder for now)
+window.showOrderDetail = function(transactionID) {
+  // This will be implemented next
+  alert(`Order detail page for Transaction ID: ${transactionID} - Coming soon!`);
+};
+
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
   const div = document.createElement('div');
@@ -1436,7 +1632,7 @@ window.addHeader = function() {
           <h1 class="mb-0">Crimson Bookstore</h1>
           <div class="d-flex gap-2">
             <button type="button" class="btn btn-outline-light" onclick="showHomePage()">Home Page</button>
-            <button type="button" class="btn btn-outline-light" id="orderHistoryBtn">Customer Order History</button>
+            <button type="button" class="btn btn-outline-light" id="orderHistoryBtn" onclick="showOrderHistory()">Customer Order History</button>
             <button type="button" class="btn btn-outline-light" id="cartBtn" onclick="showCartPage()">
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-cart" viewBox="0 0 16 16">
                 <path d="M0 1.5A.5.5 0 0 1 .5 1H2a.5.5 0 0 1 .485.379L2.89 3H14.5a.5.5 0 0 1 .491.592l-1.5 8A.5.5 0 0 1 13 12H4a.5.5 0 0 1-.491-.408L2.01 3.607 1.61 2H.5a.5.5 0 0 1-.5-.5zM3.102 4l1.313 7h8.17l1.313-7H3.102zM5 12a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm7 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm-7 1a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>
