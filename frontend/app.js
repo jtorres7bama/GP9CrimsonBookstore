@@ -248,7 +248,22 @@ async function handleLogin(e) {
     submitBtn.textContent = 'Logging in...';
 
     // Get all customers to find matching email and password
-    const response = await fetch(`${API_BASE_URL}/customers`);
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL}/customers`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        mode: 'cors'
+      });
+    } catch (fetchError) {
+      // Network error or CORS issue
+      if (fetchError.name === 'TypeError' && fetchError.message.includes('fetch')) {
+        throw new Error('Failed to connect to server. Please make sure the API is running on http://localhost:5000 and CORS is configured correctly.');
+      }
+      throw fetchError;
+    }
 
     let customers;
     try {
@@ -265,7 +280,7 @@ async function handleLogin(e) {
         // Login successful
         currentUser = customer;
         sessionStorage.setItem('currentUser', JSON.stringify(customer));
-        showHomePage();
+        showHomePageInternal();
       } else {
         showLoginMessage('Invalid email or password', 'danger');
       }
@@ -274,7 +289,14 @@ async function handleLogin(e) {
     }
   } catch (error) {
     console.error('Login error:', error);
-    const errorMsg = error.message || 'Error connecting to server. Please make sure the API is running on http://localhost:5000';
+    let errorMsg = 'Error connecting to server. ';
+    if (error.message) {
+      errorMsg = error.message;
+    } else if (error.name === 'TypeError') {
+      errorMsg = 'Failed to connect to server. Please make sure the API is running on http://localhost:5000';
+    } else {
+      errorMsg += 'Please make sure the API is running on http://localhost:5000';
+    }
     showLoginMessage(errorMsg, 'danger');
   } finally {
     // Restore button state
@@ -286,8 +308,12 @@ async function handleLogin(e) {
   }
 }
 
-// Show home page
-function showHomePage() {
+// Store books data
+let allBooksData = [];
+let filteredBooksData = [];
+
+// Show home page (internal function)
+async function showHomePageInternal() {
   // Add header
   addHeader();
   
@@ -298,17 +324,282 @@ function showHomePage() {
         <div class="col-12">
           <h2 class="mb-4">Welcome to Crimson Bookstore</h2>
           <p class="lead">Browse our collection of textbooks and course materials.</p>
-          <div class="row mt-5">
-            <div class="col-md-12">
-              <h3>Featured Books</h3>
-              <p class="text-muted">Book catalog coming soon...</p>
+        </div>
+      </div>
+
+      <!-- Search and Filter Section -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title mb-3">Search & Filter</h5>
+              <div class="row g-3">
+                <div class="col-md-3">
+                  <label for="searchTitle" class="form-label">Title</label>
+                  <input type="text" class="form-control" id="searchTitle" placeholder="Search by title...">
+                </div>
+                <div class="col-md-3">
+                  <label for="searchAuthor" class="form-label">Author</label>
+                  <input type="text" class="form-control" id="searchAuthor" placeholder="Search by author...">
+                </div>
+                <div class="col-md-2">
+                  <label for="searchISBN" class="form-label">ISBN</label>
+                  <input type="text" class="form-control" id="searchISBN" placeholder="Search by ISBN...">
+                </div>
+                <div class="col-md-2">
+                  <label for="filterMajor" class="form-label">Major</label>
+                  <input type="text" class="form-control" id="filterMajor" placeholder="Filter by major...">
+                </div>
+                <div class="col-md-2">
+                  <label for="filterCourse" class="form-label">Course</label>
+                  <input type="text" class="form-control" id="filterCourse" placeholder="Filter by course...">
+                </div>
+              </div>
+              <div class="row mt-3">
+                <div class="col-md-3">
+                  <label for="sortBy" class="form-label">Sort By</label>
+                  <select class="form-select" id="sortBy">
+                    <option value="title">Title (A-Z)</option>
+                    <option value="price-asc">Price (Low to High)</option>
+                    <option value="price-desc">Price (High to Low)</option>
+                    <option value="date-asc">Date Posted (Oldest First)</option>
+                    <option value="date-desc">Date Posted (Newest First)</option>
+                  </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                  <button type="button" class="btn btn-outline-secondary" id="clearFiltersBtn">Clear Filters</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Books Display Section -->
+      <div class="row">
+        <div class="col-12">
+          <div id="booksContainer" class="row">
+            <div class="col-12 text-center">
+              <div class="spinner-border text-danger" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading books...</p>
             </div>
           </div>
         </div>
       </div>
     </div>
   `;
+
+  // Setup event listeners for search/filter
+  setupSearchFilters();
+  
+  // Load books
+  await loadBooks();
 }
+
+// Setup search and filter event listeners
+function setupSearchFilters() {
+  const searchInputs = ['searchTitle', 'searchAuthor', 'searchISBN', 'filterMajor', 'filterCourse'];
+  searchInputs.forEach(id => {
+    const input = document.getElementById(id);
+    if (input) {
+      input.addEventListener('input', filterAndDisplayBooks);
+    }
+  });
+
+  const sortSelect = document.getElementById('sortBy');
+  if (sortSelect) {
+    sortSelect.addEventListener('change', filterAndDisplayBooks);
+  }
+
+  const clearBtn = document.getElementById('clearFiltersBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', clearFilters);
+  }
+}
+
+// Clear all filters
+function clearFilters() {
+  document.getElementById('searchTitle').value = '';
+  document.getElementById('searchAuthor').value = '';
+  document.getElementById('searchISBN').value = '';
+  document.getElementById('filterMajor').value = '';
+  document.getElementById('filterCourse').value = '';
+  document.getElementById('sortBy').value = 'title';
+  filterAndDisplayBooks();
+}
+
+// Load books from API
+async function loadBooks() {
+  try {
+    // Fetch books
+    const booksResponse = await fetch(`${API_BASE_URL}/books`);
+    const books = await booksResponse.json();
+
+    if (!booksResponse.ok) {
+      throw new Error('Failed to load books');
+    }
+
+    // Fetch authors
+    const authorsResponse = await fetch(`${API_BASE_URL}/authors`);
+    const authors = await authorsResponse.json();
+
+    // Fetch book copies for price and date
+    const copiesResponse = await fetch(`${API_BASE_URL}/bookcopy`);
+    const copies = await copiesResponse.json();
+
+    // Combine data
+    allBooksData = books.map(book => {
+      const bookAuthors = authors.filter(a => a.isbn === book.isbn);
+      const bookCopies = copies.filter(c => c.isbn === book.isbn);
+      
+      // Get lowest price and most recent date
+      const prices = bookCopies.map(c => c.price).filter(p => p > 0);
+      const dates = bookCopies.map(c => new Date(c.dateAdded)).filter(d => !isNaN(d.getTime()));
+      
+      return {
+        ...book,
+        authors: bookAuthors,
+        minPrice: prices.length > 0 ? Math.min(...prices) : null,
+        maxPrice: prices.length > 0 ? Math.max(...prices) : null,
+        latestDate: dates.length > 0 ? new Date(Math.max(...dates)) : null,
+        copyCount: bookCopies.length
+      };
+    });
+
+    filteredBooksData = [...allBooksData];
+    filterAndDisplayBooks();
+  } catch (error) {
+    console.error('Error loading books:', error);
+    const container = document.getElementById('booksContainer');
+    if (container) {
+      container.innerHTML = `
+        <div class="col-12">
+          <div class="alert alert-danger" role="alert">
+            Error loading books. Please try again later.
+          </div>
+        </div>
+      `;
+    }
+  }
+}
+
+// Filter and display books
+function filterAndDisplayBooks() {
+  const titleFilter = document.getElementById('searchTitle').value.toLowerCase().trim();
+  const authorFilter = document.getElementById('searchAuthor').value.toLowerCase().trim();
+  const isbnFilter = document.getElementById('searchISBN').value.toLowerCase().trim();
+  const majorFilter = document.getElementById('filterMajor').value.toLowerCase().trim();
+  const courseFilter = document.getElementById('filterCourse').value.toLowerCase().trim();
+  const sortBy = document.getElementById('sortBy').value;
+
+  // Filter books
+  filteredBooksData = allBooksData.filter(book => {
+    const matchesTitle = !titleFilter || book.bookTitle.toLowerCase().includes(titleFilter);
+    const matchesISBN = !isbnFilter || book.isbn.toLowerCase().includes(isbnFilter);
+    const matchesMajor = !majorFilter || book.major.toLowerCase().includes(majorFilter);
+    const matchesCourse = !courseFilter || book.course.toLowerCase().includes(courseFilter);
+    
+    const matchesAuthor = !authorFilter || book.authors.some(a => 
+      `${a.authorFName} ${a.authorLName}`.toLowerCase().includes(authorFilter)
+    );
+
+    return matchesTitle && matchesAuthor && matchesISBN && matchesMajor && matchesCourse;
+  });
+
+  // Sort books
+  filteredBooksData.sort((a, b) => {
+    switch (sortBy) {
+      case 'title':
+        return a.bookTitle.localeCompare(b.bookTitle);
+      case 'price-asc':
+        return (a.minPrice || Infinity) - (b.minPrice || Infinity);
+      case 'price-desc':
+        return (b.minPrice || 0) - (a.minPrice || 0);
+      case 'date-asc':
+        return (a.latestDate || new Date(0)) - (b.latestDate || new Date(0));
+      case 'date-desc':
+        return (b.latestDate || new Date(0)) - (a.latestDate || new Date(0));
+      default:
+        return 0;
+    }
+  });
+
+  // Display books
+  displayBooks();
+}
+
+// Display books in the container
+function displayBooks() {
+  const container = document.getElementById('booksContainer');
+  
+  if (filteredBooksData.length === 0) {
+    container.innerHTML = `
+      <div class="col-12">
+        <div class="alert alert-info" role="alert">
+          No books found matching your search criteria.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filteredBooksData.map(book => {
+    const authorsList = book.authors.length > 0 
+      ? book.authors.map(a => `${a.authorFName} ${a.authorLName}`).join(', ')
+      : 'Unknown Author';
+    
+    const priceDisplay = book.minPrice 
+      ? (book.minPrice === book.maxPrice 
+          ? `$${book.minPrice}` 
+          : `$${book.minPrice} - $${book.maxPrice}`)
+      : 'Price not available';
+    
+    const dateDisplay = book.latestDate 
+      ? new Date(book.latestDate).toLocaleDateString()
+      : 'Date not available';
+
+    return `
+      <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 shadow-sm" style="cursor: pointer;" onclick="showBookDetail('${book.isbn}')">
+          <div class="card-body">
+            <h5 class="card-title">${escapeHtml(book.bookTitle)}</h5>
+            <p class="card-text text-muted small mb-2">
+              <strong>Author(s):</strong> ${escapeHtml(authorsList)}<br>
+              <strong>ISBN:</strong> ${book.isbn}<br>
+              <strong>Course:</strong> ${escapeHtml(book.course)}<br>
+              <strong>Major:</strong> ${escapeHtml(book.major)}<br>
+              <strong>Price:</strong> ${priceDisplay}<br>
+              <strong>Date Posted:</strong> ${dateDisplay}
+            </p>
+          </div>
+          <div class="card-footer bg-transparent">
+            <small class="text-muted">${book.copyCount} copy(ies) available</small>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Show book detail page (placeholder for now)
+window.showBookDetail = function(isbn) {
+  // This will be implemented later
+  alert(`Book detail page for ISBN: ${isbn} - Coming soon!`);
+};
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Show home page (global function for onclick handlers)
+window.showHomePage = function() {
+  showHomePageInternal();
+};
 
 // Add header ribbon (global function)
 window.addHeader = function() {
@@ -348,11 +639,6 @@ function removeHeader() {
     `;
   }
 }
-
-// Show home page (global function)
-window.showHomePage = function() {
-  showHomePage();
-};
 
 // Show login message
 function showLoginMessage(message, type) {
