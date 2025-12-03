@@ -2608,8 +2608,288 @@ function displayAdminBooks() {
 
 // Placeholder functions for admin actions (to be implemented)
 window.showAddBookForm = function() {
-  alert('Add Book functionality will be implemented here.');
+  // Create modal HTML
+  const modalHTML = `
+    <div class="modal fade" id="addBookModal" tabindex="-1" aria-labelledby="addBookModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="addBookModalLabel">Add New Book</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="addBookForm">
+              <div class="mb-3">
+                <label for="newBookISBN" class="form-label">ISBN <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="newBookISBN" required maxlength="13" placeholder="e.g., 9780000000001">
+                <small class="form-text text-muted">13-character ISBN</small>
+              </div>
+              <div class="mb-3">
+                <label for="newBookTitle" class="form-label">Book Title <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="newBookTitle" required maxlength="20" placeholder="Enter book title">
+              </div>
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label for="newBookCourse" class="form-label">Course <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control" id="newBookCourse" required maxlength="20" placeholder="e.g., MATH101">
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label for="newBookMajor" class="form-label">Major <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control" id="newBookMajor" required maxlength="20" placeholder="e.g., Mathematics">
+                </div>
+              </div>
+              <div class="mb-3">
+                <label for="newBookImageURL" class="form-label">Image URL (Optional)</label>
+                <input type="url" class="form-control" id="newBookImageURL" maxlength="100" placeholder="https://example.com/image.jpg">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Authors <span class="text-danger">*</span></label>
+                <div id="authorsContainer">
+                  <div class="author-entry mb-2">
+                    <div class="row g-2">
+                      <div class="col-md-5">
+                        <input type="text" class="form-control author-fname" placeholder="First Name" required maxlength="15">
+                      </div>
+                      <div class="col-md-5">
+                        <input type="text" class="form-control author-lname" placeholder="Last Name" required maxlength="15">
+                      </div>
+                      <div class="col-md-2">
+                        <button type="button" class="btn btn-danger w-100 remove-author" style="display: none;">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                            <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="addAuthorBtn">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle" viewBox="0 0 16 16">
+                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
+                  </svg>
+                  Add Another Author
+                </button>
+              </div>
+              <div id="addBookMessage"></div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-success" onclick="handleAddBook()">Add Book</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Remove existing modal if any
+  const existingModal = document.getElementById('addBookModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // Add modal to body
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+  // Initialize Bootstrap modal
+  const modalElement = document.getElementById('addBookModal');
+  const modal = new bootstrap.Modal(modalElement);
+  
+  // Clean up modal when hidden
+  modalElement.addEventListener('hidden.bs.modal', function() {
+    modalElement.remove();
+  });
+  
+  modal.show();
+
+  // Setup event listeners
+  setupAddBookFormListeners();
+  
+  // Update remove buttons visibility
+  updateRemoveButtons();
 };
+
+// Setup event listeners for add book form
+function setupAddBookFormListeners() {
+  // Add author button
+  const addAuthorBtn = document.getElementById('addAuthorBtn');
+  if (addAuthorBtn) {
+    addAuthorBtn.addEventListener('click', addAuthorField);
+  }
+
+  // Remove author buttons
+  document.querySelectorAll('.remove-author').forEach(btn => {
+    btn.addEventListener('click', function() {
+      this.closest('.author-entry').remove();
+      updateRemoveButtons();
+    });
+  });
+}
+
+// Add another author field
+function addAuthorField() {
+  const container = document.getElementById('authorsContainer');
+  const newAuthorHTML = `
+    <div class="author-entry mb-2">
+      <div class="row g-2">
+        <div class="col-md-5">
+          <input type="text" class="form-control author-fname" placeholder="First Name" required maxlength="15">
+        </div>
+        <div class="col-md-5">
+          <input type="text" class="form-control author-lname" placeholder="Last Name" required maxlength="15">
+        </div>
+        <div class="col-md-2">
+          <button type="button" class="btn btn-danger w-100 remove-author">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+              <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+              <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  container.insertAdjacentHTML('beforeend', newAuthorHTML);
+  
+  // Attach event listener to new remove button
+  const newRemoveBtn = container.querySelector('.author-entry:last-child .remove-author');
+  if (newRemoveBtn) {
+    newRemoveBtn.addEventListener('click', function() {
+      this.closest('.author-entry').remove();
+      updateRemoveButtons();
+    });
+  }
+  
+  updateRemoveButtons();
+}
+
+// Update remove buttons visibility (hide if only one author)
+function updateRemoveButtons() {
+  const authorEntries = document.querySelectorAll('.author-entry');
+  authorEntries.forEach((entry, index) => {
+    const removeBtn = entry.querySelector('.remove-author');
+    if (removeBtn) {
+      removeBtn.style.display = authorEntries.length > 1 ? 'block' : 'none';
+    }
+  });
+}
+
+// Handle add book form submission
+async function handleAddBook() {
+  const messageDiv = document.getElementById('addBookMessage');
+  messageDiv.innerHTML = '';
+
+  // Get form values
+  const isbn = document.getElementById('newBookISBN').value.trim();
+  const bookTitle = document.getElementById('newBookTitle').value.trim();
+  const course = document.getElementById('newBookCourse').value.trim();
+  const major = document.getElementById('newBookMajor').value.trim();
+  const imageURL = document.getElementById('newBookImageURL').value.trim();
+
+  // Validate required fields
+  if (!isbn || !bookTitle || !course || !major) {
+    messageDiv.innerHTML = '<div class="alert alert-danger">Please fill in all required fields.</div>';
+    return;
+  }
+
+  // Collect authors
+  const authorEntries = document.querySelectorAll('.author-entry');
+  const authors = [];
+  let hasInvalidAuthor = false;
+
+  authorEntries.forEach(entry => {
+    const fname = entry.querySelector('.author-fname').value.trim();
+    const lname = entry.querySelector('.author-lname').value.trim();
+    if (fname && lname) {
+      authors.push({ authorFName: fname, authorLName: lname });
+    } else if (fname || lname) {
+      hasInvalidAuthor = true;
+    }
+  });
+
+  if (authors.length === 0) {
+    messageDiv.innerHTML = '<div class="alert alert-danger">Please add at least one author.</div>';
+    return;
+  }
+
+  if (hasInvalidAuthor) {
+    messageDiv.innerHTML = '<div class="alert alert-danger">Please complete all author fields or remove incomplete entries.</div>';
+    return;
+  }
+
+  try {
+    // Disable submit button
+    const submitBtn = document.querySelector('#addBookModal .btn-success');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Adding...';
+
+    // Create book
+    const bookData = {
+      isbn: isbn,
+      bookTitle: bookTitle,
+      course: course,
+      major: major,
+      imageURL: imageURL || null
+    };
+
+    const bookResponse = await fetch(`${API_BASE_URL}/books`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(bookData)
+    });
+
+    if (!bookResponse.ok) {
+      const errorData = await bookResponse.json();
+      throw new Error(errorData.message || 'Failed to create book');
+    }
+
+    // Create authors
+    const authorPromises = authors.map(author => 
+      fetch(`${API_BASE_URL}/authors`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          isbn: isbn,
+          authorFName: author.authorFName,
+          authorLName: author.authorLName
+        })
+      })
+    );
+
+    const authorResults = await Promise.all(authorPromises);
+    const failedAuthors = authorResults.filter(r => !r.ok);
+
+    if (failedAuthors.length > 0) {
+      console.warn('Some authors failed to create');
+    }
+
+    // Success - close modal and refresh
+    const modal = bootstrap.Modal.getInstance(document.getElementById('addBookModal'));
+    modal.hide();
+
+    // Refresh the book list
+    await loadAdminBooks();
+
+    // Show success message
+    alert('Book added successfully!');
+  } catch (error) {
+    console.error('Error adding book:', error);
+    messageDiv.innerHTML = `<div class="alert alert-danger">${escapeHtml(error.message || 'Error adding book. Please try again.')}</div>`;
+  } finally {
+    // Re-enable submit button
+    const submitBtn = document.querySelector('#addBookModal .btn-success');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Add Book';
+    }
+  }
+}
 
 window.showEditBookForm = function() {
   alert('Edit Book functionality will be implemented here. Please select a book to edit.');
