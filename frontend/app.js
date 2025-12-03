@@ -500,10 +500,19 @@ async function handleAdminLogin(e) {
     }
 
     if (response.ok) {
+      // Check if staff is inactive
+      const inactiveResponse = await fetch(`${API_BASE_URL}/staffs/inactive`);
+      const inactiveStaffIds = inactiveResponse.ok ? await inactiveResponse.json() : [];
+
       // Find staff with matching email and password
       const staff = staffs.find(s => s.email === email && s.sPassword === password);
 
       if (staff) {
+        // Check if staff is inactive
+        if (inactiveStaffIds.includes(staff.staffID)) {
+          throw new Error('Your staff account has been deactivated. Please contact an administrator.');
+        }
+
         // Login successful
         currentAdmin = staff;
         sessionStorage.setItem('currentAdmin', JSON.stringify(staff));
@@ -4833,7 +4842,7 @@ async function handleUpdateOrderStatus(transactionID, orderIDs) {
   }
 }
 
-window.showUserManagement = function() {
+window.showUserManagement = async function() {
   addAdminHeader();
   const mainContent = app.querySelector('main');
   mainContent.innerHTML = `
@@ -4841,13 +4850,342 @@ window.showUserManagement = function() {
       <div class="row">
         <div class="col-12">
           <h2 class="mb-4">User Management</h2>
-          <div class="alert alert-info">
-            <p class="mb-0">User management functionality will be implemented here.</p>
+          
+          <!-- Filter Section -->
+          <div class="card mb-4">
+            <div class="card-body">
+              <div class="row align-items-end">
+                <div class="col-md-4">
+                  <label for="userTypeFilter" class="form-label">Filter by User Type</label>
+                  <select class="form-select" id="userTypeFilter">
+                    <option value="">All Users</option>
+                    <option value="customer">Customers Only</option>
+                    <option value="staff">Staff Only</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button type="button" class="btn btn-outline-secondary w-100" id="clearUserFilterBtn">Clear Filter</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Users Display Section -->
+          <div id="usersContainer">
+            <div class="text-center">
+              <div class="spinner-border text-danger" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading users...</p>
+            </div>
           </div>
         </div>
       </div>
     </div>
   `;
+
+  // Setup filter listener
+  const userTypeFilter = document.getElementById('userTypeFilter');
+  if (userTypeFilter) {
+    userTypeFilter.addEventListener('change', () => loadAllUsers());
+  }
+
+  const clearFilterBtn = document.getElementById('clearUserFilterBtn');
+  if (clearFilterBtn) {
+    clearFilterBtn.addEventListener('click', () => {
+      document.getElementById('userTypeFilter').value = '';
+      loadAllUsers();
+    });
+  }
+
+  // Load users
+  await loadAllUsers();
+};
+
+// Load all users (customers and staff)
+async function loadAllUsers() {
+  const container = document.getElementById('usersContainer');
+
+  try {
+    // Fetch all customers
+    const customersResponse = await fetch(`${API_BASE_URL}/customers`);
+    const customers = customersResponse.ok ? await customersResponse.json() : [];
+
+    // Fetch all staff
+    const staffsResponse = await fetch(`${API_BASE_URL}/staffs`);
+    const staffs = staffsResponse.ok ? await staffsResponse.json() : [];
+
+    // Fetch inactive staff IDs
+    const inactiveResponse = await fetch(`${API_BASE_URL}/staffs/inactive`);
+    const inactiveStaffIds = inactiveResponse.ok ? await inactiveResponse.json() : [];
+
+    // Get filter value
+    const userTypeFilter = document.getElementById('userTypeFilter').value;
+
+    // Combine and format user data
+    const allUsers = [];
+    
+    // Add customers
+    if (!userTypeFilter || userTypeFilter === 'customer') {
+      customers.forEach(customer => {
+        // Check if this customer is also a staff member (by email)
+        const matchingStaff = staffs.find(staff => staff.email.toLowerCase() === customer.email.toLowerCase());
+        const isAlsoStaff = matchingStaff !== undefined;
+        const isAlsoInactiveStaff = isAlsoStaff && inactiveStaffIds.includes(matchingStaff.staffID);
+        allUsers.push({
+          id: customer.customerID,
+          name: customer.customerName,
+          email: customer.email,
+          createdDate: customer.createdDate,
+          type: 'customer',
+          isAlsoStaff: isAlsoStaff,
+          isInactive: isAlsoInactiveStaff
+        });
+      });
+    }
+
+    // Add staff
+    if (!userTypeFilter || userTypeFilter === 'staff') {
+      staffs.forEach(staff => {
+        allUsers.push({
+          id: staff.staffID,
+          name: staff.staffName,
+          email: staff.email,
+          createdDate: staff.createdDate,
+          type: 'staff',
+          isAlsoStaff: false,
+          isInactive: inactiveStaffIds.includes(staff.staffID)
+        });
+      });
+    }
+
+    // Sort by name
+    allUsers.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Display users
+    displayAllUsers(allUsers);
+  } catch (error) {
+    console.error('Error loading users:', error);
+    container.innerHTML = `
+      <div class="alert alert-danger" role="alert">
+        Error loading users. Please try again later.
+      </div>
+    `;
+  }
+}
+
+// Display all users
+function displayAllUsers(users) {
+  const container = document.getElementById('usersContainer');
+
+  if (users.length === 0) {
+    container.innerHTML = `
+      <div class="alert alert-info" role="alert">
+        No users found matching the selected filter.
+      </div>
+    `;
+    return;
+  }
+
+  // Group users by type for display
+  const customers = users.filter(u => u.type === 'customer');
+  const staffs = users.filter(u => u.type === 'staff');
+
+  container.innerHTML = `
+    <div class="row">
+      <!-- Customers Section -->
+      <div class="col-md-6 mb-4">
+        <div class="card">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">Customers (${customers.length})</h5>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+              <table class="table table-striped table-hover mb-0">
+                <thead class="table-light sticky-top">
+                  <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${customers.map(user => `
+                    <tr>
+                      <td>#${user.id}</td>
+                      <td>${escapeHtml(user.name)}${user.isAlsoStaff ? (user.isInactive ? ' <span class="badge bg-secondary">Also Staff (Inactive)</span>' : ' <span class="badge bg-warning text-dark">Also Staff</span>') : ''}</td>
+                      <td>${escapeHtml(user.email)}</td>
+                      <td>${new Date(user.createdDate).toLocaleDateString()}</td>
+                      <td>
+                        ${!user.isAlsoStaff ? `
+                          <button type="button" class="btn btn-sm btn-success" onclick="convertCustomerToStaff(${user.id}, '${escapeHtml(user.name)}', '${escapeHtml(user.email)}')" title="Convert to Staff">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-person-plus" viewBox="0 0 16 16">
+                              <path d="M6 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6m2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0m4 8c0 1-1 1-1 1H1s-1 0-1-1 1-4 6-4 6 3 6 4m-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10s-3.516.68-4.168 1.332c-.678.678-.83 1.418-.832 1.664z"/>
+                              <path fill-rule="evenodd" d="M13.5 5a.5.5 0 0 1 .5.5V7h1.5a.5.5 0 0 1 0 1H14v1.5a.5.5 0 0 1-1 0V8h-1.5a.5.5 0 0 1 0-1H13V5.5a.5.5 0 0 1 .5-.5"/>
+                            </svg>
+                          </button>
+                        ` : `
+                          <span class="text-muted small">Already Staff</span>
+                        `}
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Staff Section -->
+      <div class="col-md-6 mb-4">
+        <div class="card">
+          <div class="card-header bg-dark text-white">
+            <h5 class="mb-0">Staff (${staffs.length})</h5>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+              <table class="table table-striped table-hover mb-0">
+                <thead class="table-light sticky-top">
+                  <tr>
+                    <th>ID</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${staffs.map(user => `
+                    <tr class="${user.isInactive ? 'table-secondary text-muted' : ''}">
+                      <td>#${user.id}</td>
+                      <td>${escapeHtml(user.name)}</td>
+                      <td>${escapeHtml(user.email)}</td>
+                      <td>${new Date(user.createdDate).toLocaleDateString()}</td>
+                      <td>
+                        ${user.isInactive ? `
+                          <span class="badge bg-secondary">Inactive Staff</span>
+                        ` : `
+                          <span class="badge bg-success">Active Staff</span>
+                        `}
+                      </td>
+                      <td>
+                        ${user.isInactive ? `
+                          <button type="button" class="btn btn-sm btn-primary" onclick="activateStaff(${user.id}, '${escapeHtml(user.name)}')" title="Activate Staff">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-check-circle" viewBox="0 0 16 16">
+                              <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                              <path d="m10.97 4.97-.02.022-3.473 4.425-2.093-2.094a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-1.071-1.05"/>
+                            </svg>
+                          </button>
+                        ` : `
+                          <button type="button" class="btn btn-sm btn-danger" onclick="deactivateStaff(${user.id}, '${escapeHtml(user.name)}')" title="Deactivate Staff">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-x-circle" viewBox="0 0 16 16">
+                              <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                              <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708"/>
+                            </svg>
+                          </button>
+                        `}
+                      </td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Convert customer to staff
+window.convertCustomerToStaff = async function(customerID, customerName, customerEmail) {
+  if (!confirm(`Are you sure you want to convert "${customerName}" (${customerEmail}) to a staff member?\n\nThis will create a new staff account with the same name, email, and password. The customer account will remain unchanged.`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/staffs/convert-customer/${customerID}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      alert(`Successfully converted "${customerName}" to a staff member!`);
+      // Refresh the user list
+      await loadAllUsers();
+    } else {
+      alert(`Error: ${data.message || 'Failed to convert customer to staff'}`);
+    }
+  } catch (error) {
+    console.error('Error converting customer to staff:', error);
+    alert('Error converting customer to staff. Please try again.');
+  }
+};
+
+// Deactivate staff
+window.deactivateStaff = async function(staffID, staffName) {
+  if (!confirm(`Are you sure you want to deactivate "${staffName}"?\n\nThis will revoke their admin access. They will no longer be able to log in as staff, but all their data will be preserved.`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/staffs/deactivate/${staffID}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      alert(`Successfully deactivated "${staffName}". They can no longer access admin features.`);
+      // Refresh the user list
+      await loadAllUsers();
+    } else {
+      alert(`Error: ${data.message || 'Failed to deactivate staff'}`);
+    }
+  } catch (error) {
+    console.error('Error deactivating staff:', error);
+    alert('Error deactivating staff. Please try again.');
+  }
+};
+
+// Activate staff
+window.activateStaff = async function(staffID, staffName) {
+  if (!confirm(`Are you sure you want to activate "${staffName}"?\n\nThis will restore their admin access.`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/staffs/activate/${staffID}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      alert(`Successfully activated "${staffName}". They can now access admin features again.`);
+      // Refresh the user list
+      await loadAllUsers();
+    } else {
+      alert(`Error: ${data.message || 'Failed to activate staff'}`);
+    }
+  } catch (error) {
+    console.error('Error activating staff:', error);
+    alert('Error activating staff. Please try again.');
+  }
 };
 
 // Show login message
