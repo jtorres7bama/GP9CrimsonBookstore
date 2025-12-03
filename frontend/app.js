@@ -690,8 +690,8 @@ async function loadBooks() {
       const bookAuthors = authors.filter(a => a.isbn === book.isbn);
       const bookCopies = copies.filter(c => c.isbn === book.isbn);
       
-      // Filter out sold copies for available count
-      const availableCopies = bookCopies.filter(c => c.copyStatus !== 'Sold');
+      // Filter to only show "In Store" copies (exclude "Reserved" and "Sold")
+      const availableCopies = bookCopies.filter(c => c.copyStatus === 'In Store');
       
       // Get lowest price and most recent date from available copies only
       const prices = availableCopies.map(c => c.price).filter(p => p > 0);
@@ -863,10 +863,10 @@ async function loadBookDetail(isbn) {
     const authorsResponse = await fetch(`${API_BASE_URL}/authors/book/${isbn}`);
     const authors = authorsResponse.ok ? await authorsResponse.json() : [];
 
-    // Fetch available copies (excluding sold)
+    // Fetch available copies (only "In Store" status)
     const copiesResponse = await fetch(`${API_BASE_URL}/bookcopy/book/${isbn}`);
     const allCopies = copiesResponse.ok ? await copiesResponse.json() : [];
-    const availableCopies = allCopies.filter(c => c.copyStatus !== 'Sold');
+    const availableCopies = allCopies.filter(c => c.copyStatus === 'In Store');
 
     // Display book details
     displayBookDetail(book, authors, availableCopies);
@@ -996,7 +996,7 @@ window.addToCart = async function(copyID, isbn) {
       const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`);
       if (copyResponse.ok) {
         const copy = await copyResponse.json();
-        if (copy.copyStatus === 'Sold') {
+        if (copy.copyStatus === 'Sold' || copy.copyStatus === 'Reserved') {
           alert('This copy is no longer available');
           return;
         }
@@ -1014,9 +1014,15 @@ window.addToCart = async function(copyID, isbn) {
     }
     const copy = await copyResponse.json();
 
-    // Check if copy is available
-    if (copy.copyStatus === 'Sold') {
+    // Check if copy is available (must be "In Store")
+    if (copy.copyStatus === 'Sold' || copy.copyStatus === 'Reserved') {
       alert('This copy is no longer available');
+      return;
+    }
+    
+    // Double check it's "In Store"
+    if (copy.copyStatus !== 'In Store') {
+      alert('This copy is not available for purchase');
       return;
     }
 
