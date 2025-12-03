@@ -1476,33 +1476,51 @@ async function loadOrderHistory() {
         if (orderItemsResponse.ok) {
           const orderItems = await orderItemsResponse.json();
           
-          // Get the most common status (or first status if all same)
-          const statuses = orderItems.map(item => item.orderStatus);
-          const statusCounts = {};
-          statuses.forEach(status => {
-            statusCounts[status] = (statusCounts[status] || 0) + 1;
-          });
-          
-          // Get the most common status
-          let mostCommonStatus = statuses[0];
-          let maxCount = 0;
-          for (const [status, count] of Object.entries(statusCounts)) {
-            if (count > maxCount) {
-              maxCount = count;
-              mostCommonStatus = status;
-            }
-          }
+          if (orderItems && orderItems.length > 0) {
+            // Get the most common status (or first status if all same)
+            const statuses = orderItems.map(item => item.orderStatus).filter(s => s);
+            if (statuses.length > 0) {
+              const statusCounts = {};
+              statuses.forEach(status => {
+                statusCounts[status] = (statusCounts[status] || 0) + 1;
+              });
+              
+              // Get the most common status
+              let mostCommonStatus = statuses[0];
+              let maxCount = 0;
+              for (const [status, count] of Object.entries(statusCounts)) {
+                if (count > maxCount) {
+                  maxCount = count;
+                  mostCommonStatus = status;
+                }
+              }
 
-          ordersWithStatus.push({
-            transaction: transaction,
-            status: mostCommonStatus,
-            itemCount: orderItems.length
-          });
+              ordersWithStatus.push({
+                transaction: transaction,
+                status: mostCommonStatus,
+                itemCount: orderItems.length
+              });
+            } else {
+              // Order items exist but no status
+              ordersWithStatus.push({
+                transaction: transaction,
+                status: 'Unknown',
+                itemCount: orderItems.length
+              });
+            }
+          } else {
+            // Empty order items array - older order
+            ordersWithStatus.push({
+              transaction: transaction,
+              status: 'Legacy Order',
+              itemCount: 0
+            });
+          }
         } else {
-          // If no order items found, still show transaction
+          // If no order items found, still show transaction (older orders)
           ordersWithStatus.push({
             transaction: transaction,
-            status: 'Unknown',
+            status: 'Legacy Order',
             itemCount: 0
           });
         }
@@ -1600,11 +1618,323 @@ function displayOrderHistory(orders) {
   `;
 }
 
-// Show order detail page (placeholder for now)
-window.showOrderDetail = function(transactionID) {
-  // This will be implemented next
-  alert(`Order detail page for Transaction ID: ${transactionID} - Coming soon!`);
+// Show order detail page
+window.showOrderDetail = async function(transactionID) {
+  // Add header
+  addHeader();
+  
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <h2 class="mb-4">Order Details</h2>
+          <div id="orderDetailContainer">
+            <div class="text-center">
+              <div class="spinner-border text-danger" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading order details...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Load order details
+  await loadOrderDetail(transactionID);
 };
+
+// Load order detail data
+async function loadOrderDetail(transactionID) {
+  const container = document.getElementById('orderDetailContainer');
+
+  try {
+    // Fetch transaction details
+    const transactionResponse = await fetch(`${API_BASE_URL}/transactions/${transactionID}`);
+    if (!transactionResponse.ok) {
+      throw new Error('Transaction not found');
+    }
+    const transaction = await transactionResponse.json();
+
+    // Verify this transaction belongs to the current user
+    if (transaction.customerID !== currentUser.customerID) {
+      container.innerHTML = `
+        <div class="alert alert-danger" role="alert">
+          You do not have permission to view this order.
+        </div>
+        <button type="button" class="btn btn-outline-secondary mt-3" onclick="showOrderHistory()">
+          Back to Order History
+        </button>
+      `;
+      return;
+    }
+
+    // Fetch order line items for this transaction
+    let orderItems = [];
+    try {
+      const orderItemsResponse = await fetch(`${API_BASE_URL}/orderlineitems/transaction/${transactionID}`);
+      if (orderItemsResponse.ok) {
+        orderItems = await orderItemsResponse.json();
+      } else {
+        // For older orders, order items might not exist - that's okay
+        console.log('No order items found for transaction, may be an older order');
+      }
+    } catch (error) {
+      console.error('Error fetching order items:', error);
+      // Continue anyway - older orders might not have order line items
+    }
+
+    // If no order items, show transaction info only
+    if (orderItems.length === 0) {
+      container.innerHTML = `
+        <div class="card mb-4">
+          <div class="card-body">
+            <h5 class="card-title">Transaction Information</h5>
+            <div class="row">
+              <div class="col-md-6">
+                <p class="mb-2"><strong>Transaction ID:</strong> #${transaction.transactionID}</p>
+                <p class="mb-2"><strong>Date:</strong> ${new Date(transaction.dateOfTransaction).toLocaleDateString()}</p>
+                <p class="mb-2"><strong>Time:</strong> ${new Date(transaction.dateOfTransaction).toLocaleTimeString()}</p>
+              </div>
+              <div class="col-md-6">
+                <p class="mb-2"><strong>Customer ID:</strong> ${transaction.customerID}</p>
+                <p class="mb-2"><strong>Customer Name:</strong> ${escapeHtml(currentUser.customerName)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="alert alert-info" role="alert">
+          This is an older order. Detailed line items are not available.
+        </div>
+        <button type="button" class="btn btn-outline-secondary mt-3" onclick="showOrderHistory()">
+          Back to Order History
+        </button>
+      `;
+      return;
+    }
+
+    // Fetch details for each order item
+    const detailedItems = [];
+    for (const item of orderItems) {
+      try {
+        // Fetch book copy details
+        const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${item.copyID}`);
+        if (!copyResponse.ok) {
+          // Copy might not exist anymore - skip this item
+          console.warn(`Copy ${item.copyID} not found, skipping`);
+          continue;
+        }
+        const copy = await copyResponse.json();
+
+        // Fetch book details
+        let book = { bookTitle: 'Unknown Book', isbn: copy.isbn || 'Unknown' };
+        try {
+          const bookResponse = await fetch(`${API_BASE_URL}/books/${copy.isbn}`);
+          if (bookResponse.ok) {
+            book = await bookResponse.json();
+          }
+        } catch (error) {
+          console.error('Error fetching book:', error);
+        }
+
+        // Fetch authors
+        let authors = [];
+        try {
+          const authorsResponse = await fetch(`${API_BASE_URL}/authors/book/${copy.isbn}`);
+          if (authorsResponse.ok) {
+            authors = await authorsResponse.json();
+          }
+        } catch (error) {
+          console.error('Error fetching authors:', error);
+        }
+
+        // Fetch staff details
+        let staff = { staffName: 'Unknown Staff' };
+        if (item.staffID) {
+          try {
+            const staffResponse = await fetch(`${API_BASE_URL}/staffs/${item.staffID}`);
+            if (staffResponse.ok) {
+              staff = await staffResponse.json();
+            }
+          } catch (error) {
+            console.error('Error fetching staff:', error);
+          }
+        }
+
+        detailedItems.push({
+          orderItem: item,
+          copy: copy,
+          book: book,
+          authors: authors,
+          staff: staff
+        });
+      } catch (error) {
+        console.error('Error loading item details:', error);
+        // Continue processing other items even if one fails
+      }
+    }
+
+    // If we couldn't load any detailed items, show what we can
+    if (detailedItems.length === 0 && orderItems.length > 0) {
+      container.innerHTML = `
+        <div class="card mb-4">
+          <div class="card-body">
+            <h5 class="card-title">Transaction Information</h5>
+            <div class="row">
+              <div class="col-md-6">
+                <p class="mb-2"><strong>Transaction ID:</strong> #${transaction.transactionID}</p>
+                <p class="mb-2"><strong>Date:</strong> ${new Date(transaction.dateOfTransaction).toLocaleDateString()}</p>
+                <p class="mb-2"><strong>Time:</strong> ${new Date(transaction.dateOfTransaction).toLocaleTimeString()}</p>
+              </div>
+              <div class="col-md-6">
+                <p class="mb-2"><strong>Customer ID:</strong> ${transaction.customerID}</p>
+                <p class="mb-2"><strong>Customer Name:</strong> ${escapeHtml(currentUser.customerName)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="alert alert-warning" role="alert">
+          This order has ${orderItems.length} item(s), but detailed information is not available. This may be an older order.
+        </div>
+        <button type="button" class="btn btn-outline-secondary mt-3" onclick="showOrderHistory()">
+          Back to Order History
+        </button>
+      `;
+      return;
+    }
+
+    // Display order details
+    displayOrderDetail(transaction, detailedItems);
+  } catch (error) {
+    console.error('Error loading order detail:', error);
+    container.innerHTML = `
+      <div class="alert alert-danger" role="alert">
+        Error loading order details. Please try again later.
+      </div>
+      <button type="button" class="btn btn-outline-secondary mt-3" onclick="showOrderHistory()">
+        Back to Order History
+      </button>
+    `;
+  }
+}
+
+// Display order detail information
+function displayOrderDetail(transaction, detailedItems) {
+  const container = document.getElementById('orderDetailContainer');
+
+  const transactionDate = new Date(transaction.dateOfTransaction);
+  const dateString = transactionDate.toLocaleDateString();
+  const timeString = transactionDate.toLocaleTimeString();
+
+  // Calculate totals
+  const subtotal = detailedItems.reduce((sum, item) => sum + (item.copy.price * 1), 0);
+  const total = subtotal;
+
+  const getStatusBadgeClass = (status) => {
+    switch (status.toLowerCase()) {
+      case 'fulfilled':
+        return 'bg-success';
+      case 'processing':
+        return 'bg-warning';
+      case 'new':
+        return 'bg-info';
+      case 'cancelled':
+        return 'bg-danger';
+      default:
+        return 'bg-secondary';
+    }
+  };
+
+  container.innerHTML = `
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card mb-4">
+          <div class="card-body">
+            <h5 class="card-title">Transaction Information</h5>
+            <div class="row">
+              <div class="col-md-6">
+                <p class="mb-2"><strong>Transaction ID:</strong> #${transaction.transactionID}</p>
+                <p class="mb-2"><strong>Date:</strong> ${dateString}</p>
+                <p class="mb-2"><strong>Time:</strong> ${timeString}</p>
+              </div>
+              <div class="col-md-6">
+                <p class="mb-2"><strong>Customer ID:</strong> ${transaction.customerID}</p>
+                <p class="mb-2"><strong>Customer Name:</strong> ${escapeHtml(currentUser.customerName)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-body">
+            <h5 class="card-title mb-4">Order Line Items</h5>
+            <div class="table-responsive">
+              <table class="table table-striped">
+                <thead>
+                  <tr>
+                    <th>Book Title</th>
+                    <th>Author(s)</th>
+                    <th>ISBN</th>
+                    <th>Edition</th>
+                    <th>Year</th>
+                    <th>Condition</th>
+                    <th>Quantity</th>
+                    <th>Price</th>
+                    <th>Subtotal</th>
+                    <th>Status</th>
+                    <th>Staff</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${detailedItems.map(item => {
+                    const authorsList = item.authors.length > 0 
+                      ? item.authors.map(a => `${a.authorFName} ${a.authorLName}`).join(', ')
+                      : 'Unknown Author';
+                    const itemSubtotal = item.copy.price * 1; // Quantity is always 1 per copy
+                    return `
+                      <tr>
+                        <td>${escapeHtml(item.book.bookTitle)}</td>
+                        <td>${escapeHtml(authorsList)}</td>
+                        <td>${item.book.isbn}</td>
+                        <td>${item.copy.bookEdition}</td>
+                        <td>${item.copy.yearPrinted}</td>
+                        <td><span class="badge bg-info">${escapeHtml(item.copy.conditions)}</span></td>
+                        <td>1</td>
+                        <td>$${item.copy.price.toFixed(2)}</td>
+                        <td>$${itemSubtotal.toFixed(2)}</td>
+                        <td>
+                          <span class="badge ${getStatusBadgeClass(item.orderItem.orderStatus)}">
+                            ${escapeHtml(item.orderItem.orderStatus)}
+                          </span>
+                        </td>
+                        <td>${escapeHtml(item.staff.staffName)}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colspan="8" class="text-end"><strong>Total:</strong></td>
+                    <td><strong class="text-danger fs-5">$${total.toFixed(2)}</strong></td>
+                    <td colspan="2"></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <button type="button" class="btn btn-outline-secondary" onclick="showOrderHistory()">
+            Back to Order History
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
