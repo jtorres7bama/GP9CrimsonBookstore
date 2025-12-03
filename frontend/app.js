@@ -2278,23 +2278,485 @@ window.adminLogout = function() {
   showLandingPage();
 };
 
-// Placeholder functions for admin management pages
-window.showInventoryManagement = function() {
+// Inventory Management Page
+window.showInventoryManagement = async function() {
   addAdminHeader();
+  
   const mainContent = app.querySelector('main');
   mainContent.innerHTML = `
     <div class="container mt-4">
       <div class="row">
         <div class="col-12">
           <h2 class="mb-4">Inventory Management</h2>
-          <div class="alert alert-info">
-            <p class="mb-0">Inventory management functionality will be implemented here.</p>
+          <p class="lead">Manage books, inventory, and book copies.</p>
+        </div>
+      </div>
+
+      <!-- Admin Action Buttons -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title mb-3">Admin Actions</h5>
+              <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-success" onclick="showAddBookForm()">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle" viewBox="0 0 16 16">
+                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
+                  </svg>
+                  Add New Book
+                </button>
+                <button type="button" class="btn btn-info" onclick="showTotalStockTable()">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-table" viewBox="0 0 16 16">
+                    <path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2zm15 2h-4v3h4zm0 4h-4v3h4zm0 4h-4v3h3a1 1 0 0 0 1-1zm-5 3v-3H6v3zm0 4v-3H6v3zm0-8V4H6v3zM1 4v3h4V4zm0 4v3h4V8zm0 4v3h3a1 1 0 0 0 1-1v-2zm4-8v3h4V4zm0 4v3h4V8z"/>
+                  </svg>
+                  View Total Stock
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search and Filter Section -->
+      <div class="row mb-4">
+        <div class="col-12">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title mb-3">Search & Filter</h5>
+              <div class="row g-3">
+                <div class="col-md-3">
+                  <label for="adminSearchTitle" class="form-label">Title</label>
+                  <input type="text" class="form-control" id="adminSearchTitle" placeholder="Search by title...">
+                </div>
+                <div class="col-md-3">
+                  <label for="adminSearchAuthor" class="form-label">Author</label>
+                  <input type="text" class="form-control" id="adminSearchAuthor" placeholder="Search by author...">
+                </div>
+                <div class="col-md-2">
+                  <label for="adminSearchISBN" class="form-label">ISBN</label>
+                  <input type="text" class="form-control" id="adminSearchISBN" placeholder="Search by ISBN...">
+                </div>
+                <div class="col-md-2">
+                  <label for="adminFilterMajor" class="form-label">Major</label>
+                  <input type="text" class="form-control" id="adminFilterMajor" placeholder="Filter by major...">
+                </div>
+                <div class="col-md-2">
+                  <label for="adminFilterCourse" class="form-label">Course</label>
+                  <input type="text" class="form-control" id="adminFilterCourse" placeholder="Filter by course...">
+                </div>
+              </div>
+              <div class="row mt-3">
+                <div class="col-md-3">
+                  <label for="adminSortBy" class="form-label">Sort By</label>
+                  <select class="form-select" id="adminSortBy">
+                    <option value="title">Title (A-Z)</option>
+                    <option value="price-asc">Price (Low to High)</option>
+                    <option value="price-desc">Price (High to Low)</option>
+                    <option value="date-asc">Date Posted (Oldest First)</option>
+                    <option value="date-desc">Date Posted (Newest First)</option>
+                  </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                  <button type="button" class="btn btn-outline-secondary" id="adminClearFiltersBtn">Clear Filters</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Books Display Section -->
+      <div class="row">
+        <div class="col-12">
+          <div id="adminBooksContainer" class="row">
+            <div class="col-12 text-center">
+              <div class="spinner-border text-danger" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading books...</p>
+            </div>
           </div>
         </div>
       </div>
     </div>
   `;
+
+  // Setup event listeners for search/filter
+  setupAdminSearchFilters();
+  
+  // Load books
+  await loadAdminBooks();
 };
+
+// Admin books data storage
+let adminAllBooksData = [];
+let adminFilteredBooksData = [];
+
+// Setup admin search and filter event listeners
+function setupAdminSearchFilters() {
+  const searchInputs = ['adminSearchTitle', 'adminSearchAuthor', 'adminSearchISBN', 'adminFilterMajor', 'adminFilterCourse'];
+  searchInputs.forEach(id => {
+    const input = document.getElementById(id);
+    if (input) {
+      input.addEventListener('input', filterAndDisplayAdminBooks);
+    }
+  });
+
+  const sortSelect = document.getElementById('adminSortBy');
+  if (sortSelect) {
+    sortSelect.addEventListener('change', filterAndDisplayAdminBooks);
+  }
+
+  const clearBtn = document.getElementById('adminClearFiltersBtn');
+  if (clearBtn) {
+    clearBtn.addEventListener('click', clearAdminFilters);
+  }
+}
+
+// Clear all admin filters
+function clearAdminFilters() {
+  document.getElementById('adminSearchTitle').value = '';
+  document.getElementById('adminSearchAuthor').value = '';
+  document.getElementById('adminSearchISBN').value = '';
+  document.getElementById('adminFilterMajor').value = '';
+  document.getElementById('adminFilterCourse').value = '';
+  document.getElementById('adminSortBy').value = 'title';
+  filterAndDisplayAdminBooks();
+}
+
+// Load books for admin
+async function loadAdminBooks() {
+  try {
+    // Fetch books
+    const booksResponse = await fetch(`${API_BASE_URL}/books`);
+    const books = await booksResponse.json();
+
+    if (!booksResponse.ok) {
+      throw new Error('Failed to load books');
+    }
+
+    // Fetch authors
+    const authorsResponse = await fetch(`${API_BASE_URL}/authors`);
+    const authors = await authorsResponse.json();
+
+    // Fetch book copies for price and date
+    const copiesResponse = await fetch(`${API_BASE_URL}/bookcopy`);
+    const copies = await copiesResponse.json();
+
+    // Combine data
+    adminAllBooksData = books.map(book => {
+      const bookAuthors = authors.filter(a => a.isbn === book.isbn);
+      const bookCopies = copies.filter(c => c.isbn === book.isbn);
+      
+      // Get all copies (including sold) for admin view
+      const allCopies = bookCopies;
+      const availableCopies = bookCopies.filter(c => c.copyStatus !== 'Sold');
+      
+      // Get lowest price and most recent date from available copies only
+      const prices = availableCopies.map(c => c.price).filter(p => p > 0);
+      const dates = availableCopies.map(c => new Date(c.dateAdded)).filter(d => !isNaN(d.getTime()));
+      
+      return {
+        ...book,
+        authors: bookAuthors,
+        minPrice: prices.length > 0 ? Math.min(...prices) : null,
+        maxPrice: prices.length > 0 ? Math.max(...prices) : null,
+        latestDate: dates.length > 0 ? new Date(Math.max(...dates)) : null,
+        copyCount: availableCopies.length,
+        totalCopyCount: allCopies.length
+      };
+    });
+
+    adminFilteredBooksData = [...adminAllBooksData];
+    filterAndDisplayAdminBooks();
+  } catch (error) {
+    console.error('Error loading books:', error);
+    const container = document.getElementById('adminBooksContainer');
+    if (container) {
+      container.innerHTML = `
+        <div class="col-12">
+          <div class="alert alert-danger" role="alert">
+            Error loading books. Please try again later.
+          </div>
+        </div>
+      `;
+    }
+  }
+}
+
+// Filter and display admin books
+function filterAndDisplayAdminBooks() {
+  const titleFilter = document.getElementById('adminSearchTitle').value.toLowerCase().trim();
+  const authorFilter = document.getElementById('adminSearchAuthor').value.toLowerCase().trim();
+  const isbnFilter = document.getElementById('adminSearchISBN').value.toLowerCase().trim();
+  const majorFilter = document.getElementById('adminFilterMajor').value.toLowerCase().trim();
+  const courseFilter = document.getElementById('adminFilterCourse').value.toLowerCase().trim();
+  const sortBy = document.getElementById('adminSortBy').value;
+
+  // Filter books
+  adminFilteredBooksData = adminAllBooksData.filter(book => {
+    const matchesTitle = !titleFilter || book.bookTitle.toLowerCase().includes(titleFilter);
+    const matchesISBN = !isbnFilter || book.isbn.toLowerCase().includes(isbnFilter);
+    const matchesMajor = !majorFilter || book.major.toLowerCase().includes(majorFilter);
+    const matchesCourse = !courseFilter || book.course.toLowerCase().includes(courseFilter);
+    
+    const matchesAuthor = !authorFilter || book.authors.some(a => 
+      `${a.authorFName} ${a.authorLName}`.toLowerCase().includes(authorFilter)
+    );
+
+    return matchesTitle && matchesAuthor && matchesISBN && matchesMajor && matchesCourse;
+  });
+
+  // Sort books
+  adminFilteredBooksData.sort((a, b) => {
+    switch (sortBy) {
+      case 'title':
+        return a.bookTitle.localeCompare(b.bookTitle);
+      case 'price-asc':
+        return (a.minPrice || Infinity) - (b.minPrice || Infinity);
+      case 'price-desc':
+        return (b.minPrice || 0) - (a.minPrice || 0);
+      case 'date-asc':
+        return (a.latestDate || new Date(0)) - (b.latestDate || new Date(0));
+      case 'date-desc':
+        return (b.latestDate || new Date(0)) - (a.latestDate || new Date(0));
+      default:
+        return 0;
+    }
+  });
+
+  // Display books
+  displayAdminBooks();
+}
+
+// Display admin books with edit/delete buttons
+function displayAdminBooks() {
+  const container = document.getElementById('adminBooksContainer');
+  
+  if (adminFilteredBooksData.length === 0) {
+    container.innerHTML = `
+      <div class="col-12">
+        <div class="alert alert-info" role="alert">
+          No books found matching your search criteria.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = adminFilteredBooksData.map(book => {
+    const authorsList = book.authors.length > 0 
+      ? book.authors.map(a => `${a.authorFName} ${a.authorLName}`).join(', ')
+      : 'Unknown Author';
+    
+    const priceDisplay = book.minPrice 
+      ? (book.minPrice === book.maxPrice 
+          ? `$${book.minPrice}` 
+          : `$${book.minPrice} - $${book.maxPrice}`)
+      : 'Price not available';
+    
+    const dateDisplay = book.latestDate 
+      ? new Date(book.latestDate).toLocaleDateString()
+      : 'Date not available';
+
+    return `
+      <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body">
+            <h5 class="card-title">${escapeHtml(book.bookTitle)}</h5>
+            <p class="card-text text-muted small mb-2">
+              <strong>Author(s):</strong> ${escapeHtml(authorsList)}<br>
+              <strong>ISBN:</strong> ${book.isbn}<br>
+              <strong>Course:</strong> ${escapeHtml(book.course)}<br>
+              <strong>Major:</strong> ${escapeHtml(book.major)}<br>
+              <strong>Price:</strong> ${priceDisplay}<br>
+              <strong>Date Posted:</strong> ${dateDisplay}
+            </p>
+          </div>
+          <div class="card-footer bg-transparent">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <small class="text-muted">${book.copyCount} available / ${book.totalCopyCount} total</small>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-sm btn-primary flex-fill" onclick="editBook('${book.isbn}')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+                  <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 9.207 2.5 1.207l1.586 1.586L10.5 9.207z"/>
+                </svg>
+                Edit
+              </button>
+              <button type="button" class="btn btn-sm btn-danger flex-fill" onclick="deleteBook('${book.isbn}')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                  <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                  <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                </svg>
+                Delete
+              </button>
+              <button type="button" class="btn btn-sm btn-warning flex-fill" onclick="manageBookCopiesForBook('${book.isbn}')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-boxes" viewBox="0 0 16 16">
+                  <path d="M7.752.066a.5.5 0 0 1 .496 0l3.75 2.143a.5.5 0 0 1 .252.434v3.995l3.498 2A.5.5 0 0 1 16 9.07v4.286a.5.5 0 0 1-.252.434l-3.75 2.143a.5.5 0 0 1-.496 0l-3.502-2-3.502 2.001a.5.5 0 0 1-.496 0l-3.75-2.143A.5.5 0 0 1 0 13.357V9.071a.5.5 0 0 1 .252-.434L3.75 6.638V2.643a.5.5 0 0 1 .252-.434zM4.25 7.504 1.508 9.071l2.742 1.567 2.742-1.567zM7.5 9.933l-2.75 1.571v3.134l2.75-1.571zm1 3.134 2.75 1.571v-3.134L8.5 9.933zm.508-3.996 2.742 1.567 2.742-1.567-2.742-1.567zm2.242-2.433V3.504L8.5 5.076V8.21zM7.5 8.21V5.076L4.75 3.504v3.134zM5.258 2.643 8 4.21l2.742-1.567L8 1.076zM15 9.933l-2.75 1.571v3.134L15 13.067zM3.75 14.638v-3.134L1 9.933v3.134z"/>
+                </svg>
+                Copies
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Placeholder functions for admin actions (to be implemented)
+window.showAddBookForm = function() {
+  alert('Add Book functionality will be implemented here.');
+};
+
+window.showEditBookForm = function() {
+  alert('Edit Book functionality will be implemented here. Please select a book to edit.');
+};
+
+window.editBook = function(isbn) {
+  alert(`Edit Book functionality will be implemented here for ISBN: ${isbn}`);
+};
+
+window.showDeleteBookForm = function() {
+  alert('Delete Book functionality will be implemented here.');
+};
+
+window.deleteBook = function(isbn) {
+  if (confirm(`Are you sure you want to delete the book with ISBN ${isbn}? This action cannot be undone.`)) {
+    alert(`Delete Book functionality will be implemented here for ISBN: ${isbn}`);
+  }
+};
+
+window.showManageBookCopies = function() {
+  alert('Manage Book Copies functionality will be implemented here.');
+};
+
+window.manageBookCopiesForBook = function(isbn) {
+  alert(`Manage Book Copies functionality will be implemented here for ISBN: ${isbn}`);
+};
+
+window.showTotalStockTable = async function() {
+  addAdminHeader();
+  
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">Total Stock Report</h2>
+            <button type="button" class="btn btn-outline-secondary" onclick="showInventoryManagement()">
+              Back to Inventory Management
+            </button>
+          </div>
+          <div id="stockTableContainer">
+            <div class="text-center">
+              <div class="spinner-border text-danger" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading stock data...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  await loadStockTable();
+};
+
+// Load and display stock table
+async function loadStockTable() {
+  try {
+    // Fetch all data
+    const booksResponse = await fetch(`${API_BASE_URL}/books`);
+    const books = await booksResponse.json();
+    
+    const copiesResponse = await fetch(`${API_BASE_URL}/bookcopy`);
+    const copies = await copiesResponse.json();
+
+    // Calculate stock statistics
+    const stockData = books.map(book => {
+      const bookCopies = copies.filter(c => c.isbn === book.isbn);
+      const available = bookCopies.filter(c => c.copyStatus === 'In Store' || c.copyStatus === 'Reserved').length;
+      const sold = bookCopies.filter(c => c.copyStatus === 'Sold').length;
+      const total = bookCopies.length;
+      
+      return {
+        isbn: book.isbn,
+        title: book.bookTitle,
+        course: book.course,
+        major: book.major,
+        total: total,
+        available: available,
+        sold: sold
+      };
+    });
+
+    // Sort by total stock (descending)
+    stockData.sort((a, b) => b.total - a.total);
+
+    // Calculate totals
+    const grandTotal = stockData.reduce((sum, book) => sum + book.total, 0);
+    const grandAvailable = stockData.reduce((sum, book) => sum + book.available, 0);
+    const grandSold = stockData.reduce((sum, book) => sum + book.sold, 0);
+
+    // Display table
+    const container = document.getElementById('stockTableContainer');
+    container.innerHTML = `
+      <div class="card">
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-striped table-hover">
+              <thead class="table-dark">
+                <tr>
+                  <th>ISBN</th>
+                  <th>Title</th>
+                  <th>Course</th>
+                  <th>Major</th>
+                  <th class="text-end">Total Copies</th>
+                  <th class="text-end">Available</th>
+                  <th class="text-end">Sold</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${stockData.map(book => `
+                  <tr>
+                    <td>${book.isbn}</td>
+                    <td>${escapeHtml(book.title)}</td>
+                    <td>${escapeHtml(book.course)}</td>
+                    <td>${escapeHtml(book.major)}</td>
+                    <td class="text-end"><strong>${book.total}</strong></td>
+                    <td class="text-end text-success"><strong>${book.available}</strong></td>
+                    <td class="text-end text-danger"><strong>${book.sold}</strong></td>
+                  </tr>
+                `).join('')}
+                <tr class="table-info fw-bold">
+                  <td colspan="4" class="text-end">TOTAL:</td>
+                  <td class="text-end">${grandTotal}</td>
+                  <td class="text-end text-success">${grandAvailable}</td>
+                  <td class="text-end text-danger">${grandSold}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  } catch (error) {
+    console.error('Error loading stock table:', error);
+    const container = document.getElementById('stockTableContainer');
+    if (container) {
+      container.innerHTML = `
+        <div class="alert alert-danger" role="alert">
+          Error loading stock data. Please try again later.
+        </div>
+      `;
+    }
+  }
+}
 
 window.showOrderManagement = function() {
   addAdminHeader();
