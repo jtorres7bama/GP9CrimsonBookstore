@@ -2913,8 +2913,526 @@ window.showManageBookCopies = function() {
   alert('Manage Book Copies functionality will be implemented here.');
 };
 
-window.manageBookCopiesForBook = function(isbn) {
-  alert(`Manage Book Copies functionality will be implemented here for ISBN: ${isbn}`);
+window.manageBookCopiesForBook = async function(isbn) {
+  addAdminHeader();
+  
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">Manage Book Copies</h2>
+            <button type="button" class="btn btn-outline-secondary" onclick="showInventoryManagement()">
+              Back to Inventory Management
+            </button>
+          </div>
+          
+          <!-- Book Details Section -->
+          <div id="bookDetailsSection" class="card mb-4">
+            <div class="card-body">
+              <div class="text-center">
+                <div class="spinner-border text-danger" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading book details...</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Book Copies Section -->
+          <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Book Copies</h5>
+              <button type="button" class="btn btn-success btn-sm" onclick="showAddCopyForm('${isbn}')">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle" viewBox="0 0 16 16">
+                  <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                  <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
+                </svg>
+                Add New Copy
+              </button>
+            </div>
+            <div class="card-body">
+              <div id="copiesContainer">
+                <div class="text-center">
+                  <div class="spinner-border text-danger" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                  </div>
+                  <p class="mt-2">Loading copies...</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Load book details and copies
+  await loadBookCopiesPage(isbn);
+};
+
+// Load book details and copies for management page
+async function loadBookCopiesPage(isbn) {
+  try {
+    // Fetch book details
+    const bookResponse = await fetch(`${API_BASE_URL}/books/${isbn}`);
+    if (!bookResponse.ok) {
+      throw new Error('Book not found');
+    }
+    const book = await bookResponse.json();
+
+    // Fetch authors
+    const authorsResponse = await fetch(`${API_BASE_URL}/authors/book/${isbn}`);
+    const authors = authorsResponse.ok ? await authorsResponse.json() : [];
+
+    // Display book details
+    const bookDetailsSection = document.getElementById('bookDetailsSection');
+    const authorsList = authors.length > 0 
+      ? authors.map(a => `${a.authorFName} ${a.authorLName}`).join(', ')
+      : 'Unknown Author';
+
+    bookDetailsSection.innerHTML = `
+      <div class="card-body">
+        <h4 class="card-title">${escapeHtml(book.bookTitle)}</h4>
+        <div class="row mt-3">
+          <div class="col-md-6">
+            <p class="mb-2"><strong>ISBN:</strong> ${book.isbn}</p>
+            <p class="mb-2"><strong>Author(s):</strong> ${escapeHtml(authorsList)}</p>
+            <p class="mb-2"><strong>Course:</strong> ${escapeHtml(book.course)}</p>
+          </div>
+          <div class="col-md-6">
+            <p class="mb-2"><strong>Major:</strong> ${escapeHtml(book.major)}</p>
+            <p class="mb-2"><strong>Image URL:</strong> ${book.imageURL ? escapeHtml(book.imageURL) : 'Not set'}</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Fetch all copies (including sold)
+    const copiesResponse = await fetch(`${API_BASE_URL}/bookcopy/book/${isbn}`);
+    const copies = copiesResponse.ok ? await copiesResponse.json() : [];
+
+    // Display copies
+    displayBookCopies(copies, isbn);
+  } catch (error) {
+    console.error('Error loading book copies page:', error);
+    const bookDetailsSection = document.getElementById('bookDetailsSection');
+    bookDetailsSection.innerHTML = `
+      <div class="card-body">
+        <div class="alert alert-danger">Error loading book details. Please try again.</div>
+      </div>
+    `;
+  }
+}
+
+// Display book copies in a table
+function displayBookCopies(copies, isbn) {
+  const container = document.getElementById('copiesContainer');
+
+  if (copies.length === 0) {
+    container.innerHTML = `
+      <div class="alert alert-info">
+        No copies found for this book. Click "Add New Copy" to add one.
+      </div>
+    `;
+    return;
+  }
+
+  // Get status badge class
+  const getStatusBadgeClass = (status) => {
+    switch (status.toLowerCase()) {
+      case 'in store':
+        return 'bg-success';
+      case 'reserved':
+        return 'bg-warning';
+      case 'sold':
+        return 'bg-danger';
+      default:
+        return 'bg-secondary';
+    }
+  };
+
+  container.innerHTML = `
+    <div class="table-responsive">
+      <table class="table table-striped table-hover">
+        <thead class="table-dark">
+          <tr>
+            <th>Copy ID</th>
+            <th>Edition</th>
+            <th>Year Printed</th>
+            <th>Price</th>
+            <th>Condition</th>
+            <th>Date Added</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${copies.map(copy => `
+            <tr>
+              <td>${copy.copyID}</td>
+              <td>${copy.bookEdition}</td>
+              <td>${copy.yearPrinted}</td>
+              <td>$${copy.price}</td>
+              <td><span class="badge bg-info">${escapeHtml(copy.conditions)}</span></td>
+              <td>${new Date(copy.dateAdded).toLocaleDateString()}</td>
+              <td><span class="badge ${getStatusBadgeClass(copy.copyStatus)}">${escapeHtml(copy.copyStatus)}</span></td>
+              <td>
+                <div class="btn-group btn-group-sm" role="group">
+                  <button type="button" class="btn btn-primary" onclick="editBookCopy(${copy.copyID}, '${isbn}')" title="Edit">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+                      <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 9.207 2.5 1.207l1.586 1.586L10.5 9.207z"/>
+                    </svg>
+                  </button>
+                  <button type="button" class="btn btn-danger" onclick="deleteBookCopy(${copy.copyID}, '${isbn}')" title="Delete">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                      <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                      <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// Show add copy form modal
+window.showAddCopyForm = function(isbn) {
+  const modalHTML = `
+    <div class="modal fade" id="addCopyModal" tabindex="-1" aria-labelledby="addCopyModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="addCopyModalLabel">Add New Book Copy</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="addCopyForm">
+              <input type="hidden" id="addCopyISBN" value="${isbn}">
+              <div class="mb-3">
+                <label for="newCopyEdition" class="form-label">Edition <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="newCopyEdition" required min="1" value="1">
+              </div>
+              <div class="mb-3">
+                <label for="newCopyYear" class="form-label">Year Printed <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="newCopyYear" required min="1900" max="${new Date().getFullYear() + 1}" value="${new Date().getFullYear()}">
+              </div>
+              <div class="mb-3">
+                <label for="newCopyPrice" class="form-label">Price ($) <span class="text-danger">*</span></label>
+                <input type="number" class="form-control" id="newCopyPrice" required min="0" step="1" value="0">
+              </div>
+              <div class="mb-3">
+                <label for="newCopyCondition" class="form-label">Condition <span class="text-danger">*</span></label>
+                <select class="form-select" id="newCopyCondition" required>
+                  <option value="">Select condition...</option>
+                  <option value="New">New</option>
+                  <option value="Like New">Like New</option>
+                  <option value="Good">Good</option>
+                  <option value="Fair">Fair</option>
+                  <option value="Poor">Poor</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label for="newCopyStatus" class="form-label">Status <span class="text-danger">*</span></label>
+                <select class="form-select" id="newCopyStatus" required>
+                  <option value="In Store" selected>In Store</option>
+                  <option value="Reserved">Reserved</option>
+                  <option value="Sold">Sold</option>
+                </select>
+              </div>
+              <div id="addCopyMessage"></div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-success" onclick="handleAddCopy()">Add Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Remove existing modal if any
+  const existingModal = document.getElementById('addCopyModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // Add modal to body
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+  // Initialize Bootstrap modal
+  const modalElement = document.getElementById('addCopyModal');
+  const modal = new bootstrap.Modal(modalElement);
+  
+  // Clean up modal when hidden
+  modalElement.addEventListener('hidden.bs.modal', function() {
+    modalElement.remove();
+  });
+  
+  modal.show();
+};
+
+// Handle add copy form submission
+async function handleAddCopy() {
+  const messageDiv = document.getElementById('addCopyMessage');
+  messageDiv.innerHTML = '';
+
+  const isbn = document.getElementById('addCopyISBN').value;
+  const edition = parseInt(document.getElementById('newCopyEdition').value);
+  const year = parseInt(document.getElementById('newCopyYear').value);
+  const price = parseInt(document.getElementById('newCopyPrice').value);
+  const condition = document.getElementById('newCopyCondition').value;
+  const status = document.getElementById('newCopyStatus').value;
+
+  // Validate
+  if (!edition || !year || price < 0 || !condition || !status) {
+    messageDiv.innerHTML = '<div class="alert alert-danger">Please fill in all required fields.</div>';
+    return;
+  }
+
+  try {
+    const submitBtn = document.querySelector('#addCopyModal .btn-success');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Adding...';
+
+    const copyData = {
+      copyID: 0, // Will be auto-generated
+      isbn: isbn,
+      bookEdition: edition,
+      yearPrinted: year,
+      price: price,
+      conditions: condition,
+      dateAdded: new Date().toISOString().split('T')[0] + 'T00:00:00',
+      copyStatus: status
+    };
+
+    const response = await fetch(`${API_BASE_URL}/bookcopy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(copyData)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to create book copy');
+    }
+
+    // Success - close modal and refresh
+    const modal = bootstrap.Modal.getInstance(document.getElementById('addCopyModal'));
+    modal.hide();
+
+    // Refresh the copies list
+    await loadBookCopiesPage(isbn);
+
+    alert('Book copy added successfully!');
+  } catch (error) {
+    console.error('Error adding copy:', error);
+    messageDiv.innerHTML = `<div class="alert alert-danger">${escapeHtml(error.message || 'Error adding copy. Please try again.')}</div>`;
+  } finally {
+    const submitBtn = document.querySelector('#addCopyModal .btn-success');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Add Copy';
+    }
+  }
+}
+
+// Show edit copy form modal
+window.editBookCopy = async function(copyID, isbn) {
+  try {
+    // Fetch copy details
+    const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`);
+    if (!copyResponse.ok) {
+      alert('Copy not found');
+      return;
+    }
+    const copy = await copyResponse.json();
+
+    const modalHTML = `
+      <div class="modal fade" id="editCopyModal" tabindex="-1" aria-labelledby="editCopyModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="editCopyModalLabel">Edit Book Copy #${copyID}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <form id="editCopyForm">
+                <input type="hidden" id="editCopyID" value="${copyID}">
+                <input type="hidden" id="editCopyISBN" value="${isbn}">
+                <div class="mb-3">
+                  <label for="editCopyEdition" class="form-label">Edition <span class="text-danger">*</span></label>
+                  <input type="number" class="form-control" id="editCopyEdition" required min="1" value="${copy.bookEdition}">
+                </div>
+                <div class="mb-3">
+                  <label for="editCopyYear" class="form-label">Year Printed <span class="text-danger">*</span></label>
+                  <input type="number" class="form-control" id="editCopyYear" required min="1900" max="${new Date().getFullYear() + 1}" value="${copy.yearPrinted}">
+                </div>
+                <div class="mb-3">
+                  <label for="editCopyPrice" class="form-label">Price ($) <span class="text-danger">*</span></label>
+                  <input type="number" class="form-control" id="editCopyPrice" required min="0" step="1" value="${copy.price}">
+                </div>
+                <div class="mb-3">
+                  <label for="editCopyCondition" class="form-label">Condition <span class="text-danger">*</span></label>
+                  <select class="form-select" id="editCopyCondition" required>
+                    <option value="">Select condition...</option>
+                    <option value="New" ${copy.conditions === 'New' ? 'selected' : ''}>New</option>
+                    <option value="Like New" ${copy.conditions === 'Like New' ? 'selected' : ''}>Like New</option>
+                    <option value="Good" ${copy.conditions === 'Good' ? 'selected' : ''}>Good</option>
+                    <option value="Fair" ${copy.conditions === 'Fair' ? 'selected' : ''}>Fair</option>
+                    <option value="Poor" ${copy.conditions === 'Poor' ? 'selected' : ''}>Poor</option>
+                  </select>
+                </div>
+                <div class="mb-3">
+                  <label for="editCopyDateAdded" class="form-label">Date Added <span class="text-danger">*</span></label>
+                  <input type="date" class="form-control" id="editCopyDateAdded" required value="${new Date(copy.dateAdded).toISOString().split('T')[0]}">
+                </div>
+                <div class="mb-3">
+                  <label for="editCopyStatus" class="form-label">Status <span class="text-danger">*</span></label>
+                  <select class="form-select" id="editCopyStatus" required>
+                    <option value="In Store" ${copy.copyStatus === 'In Store' ? 'selected' : ''}>In Store</option>
+                    <option value="Reserved" ${copy.copyStatus === 'Reserved' ? 'selected' : ''}>Reserved</option>
+                    <option value="Sold" ${copy.copyStatus === 'Sold' ? 'selected' : ''}>Sold</option>
+                  </select>
+                </div>
+                <div id="editCopyMessage"></div>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-primary" onclick="handleEditCopy()">Save Changes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Remove existing modal if any
+    const existingModal = document.getElementById('editCopyModal');
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Initialize Bootstrap modal
+    const modalElement = document.getElementById('editCopyModal');
+    const modal = new bootstrap.Modal(modalElement);
+    
+    // Clean up modal when hidden
+    modalElement.addEventListener('hidden.bs.modal', function() {
+      modalElement.remove();
+    });
+    
+    modal.show();
+  } catch (error) {
+    console.error('Error loading copy for edit:', error);
+    alert('Error loading copy details. Please try again.');
+  }
+};
+
+// Handle edit copy form submission
+async function handleEditCopy() {
+  const messageDiv = document.getElementById('editCopyMessage');
+  messageDiv.innerHTML = '';
+
+  const copyID = parseInt(document.getElementById('editCopyID').value);
+  const isbn = document.getElementById('editCopyISBN').value;
+  const edition = parseInt(document.getElementById('editCopyEdition').value);
+  const year = parseInt(document.getElementById('editCopyYear').value);
+  const price = parseInt(document.getElementById('editCopyPrice').value);
+  const condition = document.getElementById('editCopyCondition').value;
+  const dateAdded = document.getElementById('editCopyDateAdded').value;
+  const status = document.getElementById('editCopyStatus').value;
+
+  // Validate
+  if (!edition || !year || price < 0 || !condition || !dateAdded || !status) {
+    messageDiv.innerHTML = '<div class="alert alert-danger">Please fill in all required fields.</div>';
+    return;
+  }
+
+  try {
+    const submitBtn = document.querySelector('#editCopyModal .btn-primary');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+
+    const copyData = {
+      copyID: copyID,
+      isbn: isbn,
+      bookEdition: edition,
+      yearPrinted: year,
+      price: price,
+      conditions: condition,
+      dateAdded: dateAdded + 'T00:00:00',
+      copyStatus: status
+    };
+
+    const response = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(copyData)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to update book copy');
+    }
+
+    // Success - close modal and refresh
+    const modal = bootstrap.Modal.getInstance(document.getElementById('editCopyModal'));
+    modal.hide();
+
+    // Refresh the copies list
+    await loadBookCopiesPage(isbn);
+
+    alert('Book copy updated successfully!');
+  } catch (error) {
+    console.error('Error updating copy:', error);
+    messageDiv.innerHTML = `<div class="alert alert-danger">${escapeHtml(error.message || 'Error updating copy. Please try again.')}</div>`;
+  } finally {
+    const submitBtn = document.querySelector('#editCopyModal .btn-primary');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Save Changes';
+    }
+  }
+}
+
+// Delete book copy
+window.deleteBookCopy = async function(copyID, isbn) {
+  if (!confirm(`Are you sure you want to delete copy #${copyID}? This action cannot be undone.`)) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`, {
+      method: 'DELETE'
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to delete book copy');
+    }
+
+    // Refresh the copies list
+    await loadBookCopiesPage(isbn);
+
+    alert('Book copy deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting copy:', error);
+    alert(`Error deleting copy: ${error.message || 'Please try again.'}`);
+  }
 };
 
 window.showTotalStockTable = async function() {
