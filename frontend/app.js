@@ -2166,8 +2166,11 @@ window.addAdminHeader = function() {
       <div class="container">
         <div class="d-flex justify-content-between align-items-center">
           <h1 class="mb-0">Crimson Bookstore - Admin</h1>
-          <div class="d-flex gap-2">
+          <div class="d-flex gap-2 flex-wrap">
             <button type="button" class="btn btn-outline-light" onclick="showAdminDashboard()">Admin Dashboard</button>
+            <button type="button" class="btn btn-outline-light" onclick="showInventoryManagement()">Inventory Management</button>
+            <button type="button" class="btn btn-outline-light" onclick="showOrderManagement()">Order Management</button>
+            <button type="button" class="btn btn-outline-light" onclick="showUserManagement()">User Management</button>
             <button type="button" class="btn btn-outline-light" onclick="adminLogout()">Logout</button>
           </div>
         </div>
@@ -2202,9 +2205,50 @@ window.showAdminDashboard = function() {
             </div>
           </div>
           
-          <div class="alert alert-info mt-4">
-            <h5>Admin Features</h5>
-            <p class="mb-0">Admin functionality will be added here.</p>
+          <div class="mt-4">
+            <h5 class="mb-4">Admin Features</h5>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <div class="card h-100 shadow-sm" style="cursor: pointer;" onclick="showInventoryManagement()">
+                  <div class="card-body text-center">
+                    <h5 class="card-title">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="bi bi-box-seam mb-3" viewBox="0 0 16 16">
+                        <path d="M8.186 1.113a.5.5 0 0 0-.372 0L1.846 3.5l2.404.961L10.404 2l-2.218-.887zm3.564 1.426L8 4.706l-3.75 1.25v3.383l3.75-1.25 3.75 1.25V2.539zm3.25 4.5-3.75 1.25v3.383l3.75-1.25 3.75 1.25V7.039zm-4.5 1.5-3.75 1.25v3.383l3.75-1.25 3.75 1.25V8.539z"/>
+                      </svg>
+                    </h5>
+                    <h5 class="card-title">Inventory Management</h5>
+                    <p class="card-text text-muted">Manage books, book copies, and inventory levels</p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card h-100 shadow-sm" style="cursor: pointer;" onclick="showOrderManagement()">
+                  <div class="card-body text-center">
+                    <h5 class="card-title">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="bi bi-receipt mb-3" viewBox="0 0 16 16">
+                        <path d="M1.92.506a.5.5 0 0 1 .434.14L3 1.293l.646-.647a.5.5 0 0 1 .708 0L5 1.293l.646-.647a.5.5 0 0 1 .708 0L7 1.293l.646-.647a.5.5 0 0 1 .708 0L9 1.293l.646-.647a.5.5 0 0 1 .708 0l.646.647.646-.647a.5.5 0 0 1 .708 0l.646.647.646-.647a.5.5 0 0 1 .801.13l.5 1A.5.5 0 0 1 15 2v12a.5.5 0 0 1-.053.224l-.5 1a.5.5 0 0 1-.8.13L13 14.707l-.646.647a.5.5 0 0 1-.708 0L11 14.707l-.646.647a.5.5 0 0 1-.708 0L9 14.707l-.646.647a.5.5 0 0 1-.708 0L7 14.707l-.646.647a.5.5 0 0 1-.708 0L5 14.707l-.646.647a.5.5 0 0 1-.708 0L3 14.707l-.646.647a.5.5 0 0 1-.801-.13l-.5-1A.5.5 0 0 1 1 14V2a.5.5 0 0 1 .053-.224l.5-1a.5.5 0 0 1 .367-.27zm.217 1.338L2 2.118v11.764l.137.274.51-.51a.5.5 0 0 1 .707 0l.646.647.646-.646a.5.5 0 0 1 .708 0l.646.646.646-.646a.5.5 0 0 1 .708 0l.646.646.646-.646a.5.5 0 0 1 .708 0l.646.646.646-.646a.5.5 0 0 1 .708 0l.646.646.646-.646a.5.5 0 0 1 .708 0l.509.509.137-.274V2.118l-.137-.274-.51.51a.5.5 0 0 1-.707 0L12 1.707l-.646.647a.5.5 0 0 1-.708 0L10 1.707l-.646.647a.5.5 0 0 1-.708 0L8 1.707l-.646.647a.5.5 0 0 1-.708 0L6 1.707l-.646.647a.5.5 0 0 1-.708 0L4 1.707l-.646.647a.5.5 0 0 1-.708 0l-.509-.509z"/>
+                        <path d="M3 4.5a.5.5 0 0 1 .5-.5h6a.5.5 0 1 1 0 1h-6a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h6a.5.5 0 1 1 0 1h-6a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h6a.5.5 0 1 1 0 1h-6a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h6a.5.5 0 1 1 0 1h-6a.5.5 0 0 1-.5-.5m8-6a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5m0 2a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5"/>
+                      </svg>
+                    </h5>
+                    <h5 class="card-title">Order Management</h5>
+                    <p class="card-text text-muted">View and manage all customer orders and transactions</p>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="card h-100 shadow-sm" style="cursor: pointer;" onclick="showUserManagement()">
+                  <div class="card-body text-center">
+                    <h5 class="card-title">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="bi bi-people mb-3" viewBox="0 0 16 16">
+                        <path d="M15 14s1 0 1-1-1-4-5-4-5 3-5 4 1 1 1 1zm-7.978-1L7 12.996c.001-.264.167-1.03.76-1.72C8.312 10.629 9.282 10 11 10c1.717 0 2.687.629 3.24 1.276.593.69.758 1.457.76 1.72l-.008.002-.014.002zM11 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4m3-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0M6.936 9.28a6 6 0 0 0-1.23-.247A7 7 0 0 0 5 9c-4 0-5 3-5 4 0 .667.333 1 1 1h4.216A3 3 0 0 1 7 11c.35 0 .69.04 1.016.107M4.92 10A5.5 5.5 0 0 0 4 11H1c0-.26.164-1.03.76-1.724.545-.636 1.492-1.256 3.16-1.275ZM1.5 5.5a3 3 0 1 1 6 0 3 3 0 0 1-6 0m3-2a2 2 0 1 0 0 4 2 2 0 0 0 0-4"/>
+                      </svg>
+                    </h5>
+                    <h5 class="card-title">User Management</h5>
+                    <p class="card-text text-muted">Manage customer accounts and staff members</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2217,6 +2261,58 @@ window.adminLogout = function() {
   currentAdmin = null;
   sessionStorage.removeItem('currentAdmin');
   showLandingPage();
+};
+
+// Placeholder functions for admin management pages
+window.showInventoryManagement = function() {
+  addAdminHeader();
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <h2 class="mb-4">Inventory Management</h2>
+          <div class="alert alert-info">
+            <p class="mb-0">Inventory management functionality will be implemented here.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+window.showOrderManagement = function() {
+  addAdminHeader();
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <h2 class="mb-4">Order Management</h2>
+          <div class="alert alert-info">
+            <p class="mb-0">Order management functionality will be implemented here.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+window.showUserManagement = function() {
+  addAdminHeader();
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <h2 class="mb-4">User Management</h2>
+          <div class="alert alert-info">
+            <p class="mb-0">User management functionality will be implemented here.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
 };
 
 // Show login message
