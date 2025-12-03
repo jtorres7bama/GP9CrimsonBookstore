@@ -2895,9 +2895,358 @@ window.showEditBookForm = function() {
   alert('Edit Book functionality will be implemented here. Please select a book to edit.');
 };
 
-window.editBook = function(isbn) {
-  alert(`Edit Book functionality will be implemented here for ISBN: ${isbn}`);
+window.editBook = async function(isbn) {
+  try {
+    // Fetch book details
+    const bookResponse = await fetch(`${API_BASE_URL}/books/${isbn}`);
+    if (!bookResponse.ok) {
+      alert('Book not found');
+      return;
+    }
+    const book = await bookResponse.json();
+
+    // Fetch authors
+    const authorsResponse = await fetch(`${API_BASE_URL}/authors/book/${isbn}`);
+    const authors = authorsResponse.ok ? await authorsResponse.json() : [];
+
+    // Create modal HTML
+    const authorsHTML = authors.map((author, index) => `
+      <div class="author-entry mb-2" data-author-id="${author.authorID}">
+        <div class="row g-2">
+          <div class="col-md-5">
+            <input type="text" class="form-control author-fname" placeholder="First Name" required maxlength="15" value="${escapeHtml(author.authorFName)}">
+          </div>
+          <div class="col-md-5">
+            <input type="text" class="form-control author-lname" placeholder="Last Name" required maxlength="15" value="${escapeHtml(author.authorLName)}">
+          </div>
+          <div class="col-md-2">
+            <button type="button" class="btn btn-danger w-100 remove-author">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    const modalHTML = `
+      <div class="modal fade" id="editBookModal" tabindex="-1" aria-labelledby="editBookModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="editBookModalLabel">Edit Book</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <form id="editBookForm">
+                <div class="mb-3">
+                  <label for="editBookISBN" class="form-label">ISBN</label>
+                  <input type="text" class="form-control" id="editBookISBN" value="${book.isbn}" readonly>
+                  <small class="form-text text-muted">ISBN cannot be changed</small>
+                </div>
+                <div class="mb-3">
+                  <label for="editBookTitle" class="form-label">Book Title <span class="text-danger">*</span></label>
+                  <input type="text" class="form-control" id="editBookTitle" required maxlength="20" value="${escapeHtml(book.bookTitle)}">
+                </div>
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label for="editBookCourse" class="form-label">Course <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="editBookCourse" required maxlength="20" value="${escapeHtml(book.course)}">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label for="editBookMajor" class="form-label">Major <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="editBookMajor" required maxlength="20" value="${escapeHtml(book.major)}">
+                  </div>
+                </div>
+                <div class="mb-3">
+                  <label for="editBookImageURL" class="form-label">Image URL (Optional)</label>
+                  <input type="url" class="form-control" id="editBookImageURL" maxlength="100" value="${book.imageURL ? escapeHtml(book.imageURL) : ''}">
+                </div>
+                <div class="mb-3">
+                  <label class="form-label">Authors <span class="text-danger">*</span></label>
+                  <div id="editAuthorsContainer">
+                    ${authorsHTML || `
+                      <div class="author-entry mb-2">
+                        <div class="row g-2">
+                          <div class="col-md-5">
+                            <input type="text" class="form-control author-fname" placeholder="First Name" required maxlength="15">
+                          </div>
+                          <div class="col-md-5">
+                            <input type="text" class="form-control author-lname" placeholder="Last Name" required maxlength="15">
+                          </div>
+                          <div class="col-md-2">
+                            <button type="button" class="btn btn-danger w-100 remove-author" style="display: none;">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+                                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+                                <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    `}
+                  </div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="editAddAuthorBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-plus-circle" viewBox="0 0 16 16">
+                      <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14m0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16"/>
+                      <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4"/>
+                    </svg>
+                    Add Another Author
+                  </button>
+                </div>
+                <div id="editBookMessage"></div>
+              </form>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+              <button type="button" class="btn btn-primary" onclick="handleEditBook()">Save Changes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Remove existing modal if any
+    const existingModal = document.getElementById('editBookModal');
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Initialize Bootstrap modal
+    const modalElement = document.getElementById('editBookModal');
+    const modal = new bootstrap.Modal(modalElement);
+    
+    // Clean up modal when hidden
+    modalElement.addEventListener('hidden.bs.modal', function() {
+      modalElement.remove();
+    });
+    
+    modal.show();
+
+    // Setup event listeners
+    setupEditBookFormListeners();
+    updateEditRemoveButtons();
+  } catch (error) {
+    console.error('Error loading book for edit:', error);
+    alert('Error loading book details. Please try again.');
+  }
 };
+
+// Setup event listeners for edit book form
+function setupEditBookFormListeners() {
+  // Add author button
+  const addAuthorBtn = document.getElementById('editAddAuthorBtn');
+  if (addAuthorBtn) {
+    addAuthorBtn.addEventListener('click', addEditAuthorField);
+  }
+
+  // Remove author buttons
+  document.querySelectorAll('#editAuthorsContainer .remove-author').forEach(btn => {
+    btn.addEventListener('click', function() {
+      this.closest('.author-entry').remove();
+      updateEditRemoveButtons();
+    });
+  });
+}
+
+// Add another author field for edit form
+function addEditAuthorField() {
+  const container = document.getElementById('editAuthorsContainer');
+  const newAuthorHTML = `
+    <div class="author-entry mb-2">
+      <div class="row g-2">
+        <div class="col-md-5">
+          <input type="text" class="form-control author-fname" placeholder="First Name" required maxlength="15">
+        </div>
+        <div class="col-md-5">
+          <input type="text" class="form-control author-lname" placeholder="Last Name" required maxlength="15">
+        </div>
+        <div class="col-md-2">
+          <button type="button" class="btn btn-danger w-100 remove-author">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+              <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+              <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  container.insertAdjacentHTML('beforeend', newAuthorHTML);
+  
+  // Attach event listener to new remove button
+  const newRemoveBtn = container.querySelector('.author-entry:last-child .remove-author');
+  if (newRemoveBtn) {
+    newRemoveBtn.addEventListener('click', function() {
+      this.closest('.author-entry').remove();
+      updateEditRemoveButtons();
+    });
+  }
+  
+  updateEditRemoveButtons();
+}
+
+// Update remove buttons visibility for edit form
+function updateEditRemoveButtons() {
+  const authorEntries = document.querySelectorAll('#editAuthorsContainer .author-entry');
+  authorEntries.forEach((entry, index) => {
+    const removeBtn = entry.querySelector('.remove-author');
+    if (removeBtn) {
+      removeBtn.style.display = authorEntries.length > 1 ? 'block' : 'none';
+    }
+  });
+}
+
+// Handle edit book form submission
+async function handleEditBook() {
+  const messageDiv = document.getElementById('editBookMessage');
+  messageDiv.innerHTML = '';
+
+  // Get form values
+  const isbn = document.getElementById('editBookISBN').value.trim();
+  const bookTitle = document.getElementById('editBookTitle').value.trim();
+  const course = document.getElementById('editBookCourse').value.trim();
+  const major = document.getElementById('editBookMajor').value.trim();
+  const imageURL = document.getElementById('editBookImageURL').value.trim();
+
+  // Validate required fields
+  if (!isbn || !bookTitle || !course || !major) {
+    messageDiv.innerHTML = '<div class="alert alert-danger">Please fill in all required fields.</div>';
+    return;
+  }
+
+  // Collect authors
+  const authorEntries = document.querySelectorAll('#editAuthorsContainer .author-entry');
+  const authors = [];
+  const existingAuthorIds = [];
+  let hasInvalidAuthor = false;
+
+  authorEntries.forEach(entry => {
+    const authorId = entry.getAttribute('data-author-id');
+    const fname = entry.querySelector('.author-fname').value.trim();
+    const lname = entry.querySelector('.author-lname').value.trim();
+    if (fname && lname) {
+      authors.push({ 
+        authorID: authorId ? parseInt(authorId) : null,
+        authorFName: fname, 
+        authorLName: lname 
+      });
+      if (authorId) {
+        existingAuthorIds.push(parseInt(authorId));
+      }
+    } else if (fname || lname) {
+      hasInvalidAuthor = true;
+    }
+  });
+
+  if (authors.length === 0) {
+    messageDiv.innerHTML = '<div class="alert alert-danger">Please add at least one author.</div>';
+    return;
+  }
+
+  if (hasInvalidAuthor) {
+    messageDiv.innerHTML = '<div class="alert alert-danger">Please complete all author fields or remove incomplete entries.</div>';
+    return;
+  }
+
+  try {
+    // Disable submit button
+    const submitBtn = document.querySelector('#editBookModal .btn-primary');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+
+    // Update book
+    const bookData = {
+      isbn: isbn,
+      bookTitle: bookTitle,
+      course: course,
+      major: major,
+      imageURL: imageURL || null
+    };
+
+    const bookResponse = await fetch(`${API_BASE_URL}/books/${isbn}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(bookData)
+    });
+
+    if (!bookResponse.ok) {
+      const errorData = await bookResponse.json();
+      throw new Error(errorData.message || 'Failed to update book');
+    }
+
+    // Get current authors to determine which to delete
+    const currentAuthorsResponse = await fetch(`${API_BASE_URL}/authors/book/${isbn}`);
+    const currentAuthors = currentAuthorsResponse.ok ? await currentAuthorsResponse.json() : [];
+    const authorsToDelete = currentAuthors.filter(a => !existingAuthorIds.includes(a.authorID));
+
+    // Delete removed authors
+    for (const author of authorsToDelete) {
+      await fetch(`${API_BASE_URL}/authors/${author.authorID}`, {
+        method: 'DELETE'
+      });
+    }
+
+    // Update or create authors
+    for (const author of authors) {
+      if (author.authorID) {
+        // Update existing author
+        await fetch(`${API_BASE_URL}/authors/${author.authorID}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            authorID: author.authorID,
+            isbn: isbn,
+            authorFName: author.authorFName,
+            authorLName: author.authorLName
+          })
+        });
+      } else {
+        // Create new author
+        await fetch(`${API_BASE_URL}/authors`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            isbn: isbn,
+            authorFName: author.authorFName,
+            authorLName: author.authorLName
+          })
+        });
+      }
+    }
+
+    // Success - close modal and refresh
+    const modal = bootstrap.Modal.getInstance(document.getElementById('editBookModal'));
+    modal.hide();
+
+    // Refresh the book list
+    await loadAdminBooks();
+
+    // Show success message
+    alert('Book updated successfully!');
+  } catch (error) {
+    console.error('Error updating book:', error);
+    messageDiv.innerHTML = `<div class="alert alert-danger">${escapeHtml(error.message || 'Error updating book. Please try again.')}</div>`;
+  } finally {
+    // Re-enable submit button
+    const submitBtn = document.querySelector('#editBookModal .btn-primary');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Save Changes';
+    }
+  }
+}
 
 window.showDeleteBookForm = function() {
   alert('Delete Book functionality will be implemented here.');
