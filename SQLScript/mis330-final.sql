@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS Customers (
     CustomerID    int NOT NULL auto_increment,
     CustomerName  varchar(30) NOT NULL,
     CPassword     varchar(50) NOT NULL,
-    Email         varchar(50) NOT NULL,
+    Email         varchar(50) unique NOT NULL,
     CreatedDate	  date not null,
     constraint PK_CUSTOMERS primary key(CustomerID)
 );
