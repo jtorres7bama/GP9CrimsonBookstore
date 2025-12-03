@@ -4113,7 +4113,7 @@ async function loadStockTable() {
   }
 }
 
-window.showOrderManagement = function() {
+window.showOrderManagement = async function() {
   addAdminHeader();
   const mainContent = app.querySelector('main');
   mainContent.innerHTML = `
@@ -4121,14 +4121,680 @@ window.showOrderManagement = function() {
       <div class="row">
         <div class="col-12">
           <h2 class="mb-4">Order Management</h2>
-          <div class="alert alert-info">
-            <p class="mb-0">Order management functionality will be implemented here.</p>
+          
+          <!-- Filter Section -->
+          <div class="card mb-4">
+            <div class="card-body">
+              <div class="row align-items-end">
+                <div class="col-md-4">
+                  <label for="orderStatusFilter" class="form-label">Filter by Status</label>
+                  <select class="form-select" id="orderStatusFilter">
+                    <option value="">All Orders</option>
+                    <option value="New">New</option>
+                    <option value="Processing">Processing</option>
+                    <option value="Fulfilled">Fulfilled</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div class="col-md-2">
+                  <button type="button" class="btn btn-outline-secondary w-100" id="clearOrderFilterBtn">Clear Filter</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Orders Display Section -->
+          <div id="adminOrdersContainer">
+            <div class="text-center">
+              <div class="spinner-border text-danger" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading orders...</p>
+            </div>
           </div>
         </div>
       </div>
     </div>
   `;
+
+  // Setup filter listener
+  const statusFilter = document.getElementById('orderStatusFilter');
+  if (statusFilter) {
+    statusFilter.addEventListener('change', () => loadAdminOrders());
+  }
+
+  const clearFilterBtn = document.getElementById('clearOrderFilterBtn');
+  if (clearFilterBtn) {
+    clearFilterBtn.addEventListener('click', () => {
+      document.getElementById('orderStatusFilter').value = '';
+      loadAdminOrders();
+    });
+  }
+
+  // Load orders
+  await loadAdminOrders();
 };
+
+// Load all orders for admin
+async function loadAdminOrders() {
+  const container = document.getElementById('adminOrdersContainer');
+
+  try {
+    // Fetch all transactions
+    const transactionsResponse = await fetch(`${API_BASE_URL}/transactions`);
+    if (!transactionsResponse.ok) {
+      throw new Error('Failed to load transactions');
+    }
+    const transactions = await transactionsResponse.json();
+
+    // Fetch all order line items
+    const orderItemsResponse = await fetch(`${API_BASE_URL}/orderlineitems`);
+    const allOrderItems = orderItemsResponse.ok ? await orderItemsResponse.json() : [];
+
+    // Fetch all customers for display
+    const customersResponse = await fetch(`${API_BASE_URL}/customers`);
+    const customers = customersResponse.ok ? await customersResponse.json() : [];
+
+    // Get filter value
+    const statusFilter = document.getElementById('orderStatusFilter').value;
+
+    // Group order items by transaction and build order data
+    const ordersData = [];
+    for (const transaction of transactions) {
+      const transactionOrderItems = allOrderItems.filter(item => item.transactionID === transaction.transactionID);
+      
+      if (transactionOrderItems.length === 0) {
+        continue; // Skip transactions with no order items
+      }
+
+      // Apply status filter
+      if (statusFilter) {
+        const hasMatchingStatus = transactionOrderItems.some(item => item.orderStatus === statusFilter);
+        if (!hasMatchingStatus) {
+          continue;
+        }
+      }
+
+      // Get customer info
+      const customer = customers.find(c => c.customerID === transaction.customerID);
+
+      // Determine overall status (most common status, or "Mixed" if different statuses)
+      const statuses = transactionOrderItems.map(item => item.orderStatus);
+      const statusCounts = {};
+      statuses.forEach(status => {
+        statusCounts[status] = (statusCounts[status] || 0) + 1;
+      });
+      
+      let overallStatus = statuses[0];
+      let maxCount = 0;
+      for (const [status, count] of Object.entries(statusCounts)) {
+        if (count > maxCount) {
+          maxCount = count;
+          overallStatus = status;
+        }
+      }
+      
+      // Check if all items have same status
+      const allSameStatus = Object.keys(statusCounts).length === 1;
+      const displayStatus = allSameStatus ? overallStatus : 'Mixed';
+
+      ordersData.push({
+        transaction: transaction,
+        customer: customer,
+        orderItems: transactionOrderItems,
+        overallStatus: displayStatus,
+        itemCount: transactionOrderItems.length
+      });
+    }
+
+    // Sort by date (newest first)
+    ordersData.sort((a, b) => new Date(b.transaction.dateOfTransaction) - new Date(a.transaction.dateOfTransaction));
+
+    // Display orders
+    displayAdminOrders(ordersData);
+  } catch (error) {
+    console.error('Error loading admin orders:', error);
+    container.innerHTML = `
+      <div class="alert alert-danger" role="alert">
+        Error loading orders. Please try again later.
+      </div>
+    `;
+  }
+}
+
+// Display admin orders
+function displayAdminOrders(ordersData) {
+  const container = document.getElementById('adminOrdersContainer');
+
+  if (ordersData.length === 0) {
+    container.innerHTML = `
+      <div class="alert alert-info" role="alert">
+        No orders found matching the selected filter.
+      </div>
+    `;
+    return;
+  }
+
+  // Get status badge class
+  const getStatusBadgeClass = (status) => {
+    switch (status.toLowerCase()) {
+      case 'fulfilled':
+        return 'bg-success';
+      case 'processing':
+        return 'bg-warning';
+      case 'new':
+        return 'bg-info';
+      case 'cancelled':
+        return 'bg-danger';
+      case 'mixed':
+        return 'bg-secondary';
+      default:
+        return 'bg-secondary';
+    }
+  };
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-striped table-hover">
+            <thead class="table-dark">
+              <tr>
+                <th>Transaction ID</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th>Items</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${ordersData.map(order => `
+                <tr>
+                  <td>#${order.transaction.transactionID}</td>
+                  <td>${new Date(order.transaction.dateOfTransaction).toLocaleDateString()}</td>
+                  <td>${order.customer ? escapeHtml(order.customer.customerName) : `Customer #${order.transaction.customerID}`}</td>
+                  <td>${order.itemCount} item(s)</td>
+                  <td>
+                    <span class="badge ${getStatusBadgeClass(order.overallStatus)}">${escapeHtml(order.overallStatus)}</span>
+                  </td>
+                  <td>
+                    <div class="btn-group btn-group-sm" role="group">
+                      <button type="button" class="btn btn-primary" onclick="viewAdminOrderDetail(${order.transaction.transactionID})" title="View Details">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16">
+                          <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8M1.173 8a13 13 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5s3.879 1.168 5.168 2.457A13 13 0 0 1 14.828 8q-.086.13-.195.288c-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5s-3.879-1.168-5.168-2.457A13 13 0 0 1 1.172 8z"/>
+                          <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5M4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0"/>
+                        </svg>
+                      </button>
+                      <button type="button" class="btn btn-warning" onclick="updateOrderStatus(${order.transaction.transactionID})" title="Update Status">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+                          <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 9.207 2.5 1.207l1.586 1.586L10.5 9.207z"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// View admin order detail
+window.viewAdminOrderDetail = async function(transactionID) {
+  addAdminHeader();
+  
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">Order Details - Transaction #${transactionID}</h2>
+            <button type="button" class="btn btn-outline-secondary" onclick="showOrderManagement()">
+              Back to Order Management
+            </button>
+          </div>
+          <div id="adminOrderDetailContainer">
+            <div class="text-center">
+              <div class="spinner-border text-danger" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Loading order details...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  await loadAdminOrderDetail(transactionID);
+};
+
+// Load admin order detail
+async function loadAdminOrderDetail(transactionID) {
+  const container = document.getElementById('adminOrderDetailContainer');
+
+  try {
+    // Fetch transaction details
+    const transactionResponse = await fetch(`${API_BASE_URL}/transactions/${transactionID}`);
+    if (!transactionResponse.ok) {
+      throw new Error('Transaction not found');
+    }
+    const transaction = await transactionResponse.json();
+
+    // Fetch customer details
+    const customerResponse = await fetch(`${API_BASE_URL}/customers/${transaction.customerID}`);
+    const customer = customerResponse.ok ? await customerResponse.json() : null;
+
+    // Fetch order line items
+    const orderItemsResponse = await fetch(`${API_BASE_URL}/orderlineitems/transaction/${transactionID}`);
+    const orderItems = orderItemsResponse.ok ? await orderItemsResponse.json() : [];
+
+    if (orderItems.length === 0) {
+      container.innerHTML = `
+        <div class="alert alert-info" role="alert">
+          No items found for this order.
+        </div>
+      `;
+      return;
+    }
+
+    // Fetch details for each order item
+    const detailedItems = [];
+    for (const item of orderItems) {
+      try {
+        // Fetch book copy details
+        const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${item.copyID}`);
+        if (!copyResponse.ok) continue;
+        const copy = await copyResponse.json();
+
+        // Fetch book details
+        const bookResponse = await fetch(`${API_BASE_URL}/books/${copy.isbn}`);
+        const book = bookResponse.ok ? await bookResponse.json() : { bookTitle: 'Unknown', isbn: copy.isbn };
+
+        // Fetch authors
+        const authorsResponse = await fetch(`${API_BASE_URL}/authors/book/${copy.isbn}`);
+        const authors = authorsResponse.ok ? await authorsResponse.json() : [];
+
+        // Fetch staff details
+        const staffResponse = await fetch(`${API_BASE_URL}/staffs/${item.staffID}`);
+        const staff = staffResponse.ok ? await staffResponse.json() : { staffName: 'Unknown Staff' };
+
+        detailedItems.push({
+          orderItem: item,
+          copy: copy,
+          book: book,
+          authors: authors,
+          staff: staff
+        });
+      } catch (error) {
+        console.error('Error loading item details:', error);
+      }
+    }
+
+    // Display order details
+    displayAdminOrderDetail(transaction, customer, detailedItems);
+  } catch (error) {
+    console.error('Error loading admin order detail:', error);
+    container.innerHTML = `
+      <div class="alert alert-danger" role="alert">
+        Error loading order details. Please try again later.
+      </div>
+    `;
+  }
+}
+
+// Display admin order detail
+function displayAdminOrderDetail(transaction, customer, detailedItems) {
+  const container = document.getElementById('adminOrderDetailContainer');
+
+  const getStatusBadgeClass = (status) => {
+    switch (status.toLowerCase()) {
+      case 'fulfilled':
+        return 'bg-success';
+      case 'processing':
+        return 'bg-warning';
+      case 'new':
+        return 'bg-info';
+      case 'cancelled':
+        return 'bg-danger';
+      default:
+        return 'bg-secondary';
+    }
+  };
+
+  const total = detailedItems.reduce((sum, item) => sum + item.copy.price, 0);
+
+  container.innerHTML = `
+    <div class="card mb-4">
+      <div class="card-body">
+        <h5 class="card-title mb-4">Transaction Information</h5>
+        <div class="row">
+          <div class="col-md-6">
+            <p class="mb-2"><strong>Transaction ID:</strong> #${transaction.transactionID}</p>
+            <p class="mb-2"><strong>Date:</strong> ${new Date(transaction.dateOfTransaction).toLocaleDateString()}</p>
+            <p class="mb-2"><strong>Time:</strong> ${new Date(transaction.dateOfTransaction).toLocaleTimeString()}</p>
+          </div>
+          <div class="col-md-6">
+            <p class="mb-2"><strong>Customer ID:</strong> ${transaction.customerID}</p>
+            <p class="mb-2"><strong>Customer Name:</strong> ${customer ? escapeHtml(customer.customerName) : 'Unknown'}</p>
+            <p class="mb-2"><strong>Customer Email:</strong> ${customer ? escapeHtml(customer.email) : 'Unknown'}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title mb-4">Order Line Items</h5>
+        <div class="table-responsive">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Book Title</th>
+                <th>Author(s)</th>
+                <th>ISBN</th>
+                <th>Edition</th>
+                <th>Condition</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Staff</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${detailedItems.map(item => {
+                const authorsList = item.authors.length > 0 
+                  ? item.authors.map(a => `${a.authorFName} ${a.authorLName}`).join(', ')
+                  : 'Unknown Author';
+                return `
+                  <tr>
+                    <td>#${item.orderItem.orderID}</td>
+                    <td>${escapeHtml(item.book.bookTitle)}</td>
+                    <td>${escapeHtml(authorsList)}</td>
+                    <td>${item.book.isbn}</td>
+                    <td>${item.copy.bookEdition}</td>
+                    <td><span class="badge bg-info">${escapeHtml(item.copy.conditions)}</span></td>
+                    <td>$${item.copy.price.toFixed(2)}</td>
+                    <td>
+                      <span class="badge ${getStatusBadgeClass(item.orderItem.orderStatus)}">
+                        ${escapeHtml(item.orderItem.orderStatus)}
+                      </span>
+                    </td>
+                    <td>${escapeHtml(item.staff.staffName)}</td>
+                    <td>
+                      <button type="button" class="btn btn-sm btn-warning" onclick="updateSingleOrderStatus(${item.orderItem.orderID}, ${item.orderItem.copyID}, '${item.orderItem.orderStatus}')">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-pencil" viewBox="0 0 16 16">
+                          <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207zm1.586 3L10.5 9.207 2.5 1.207l1.586 1.586L10.5 9.207z"/>
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+              <tr class="table-info fw-bold">
+                <td colspan="6" class="text-end">TOTAL:</td>
+                <td>$${total.toFixed(2)}</td>
+                <td colspan="3"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// Update order status for entire transaction
+window.updateOrderStatus = async function(transactionID) {
+  try {
+    // Fetch order items for this transaction
+    const orderItemsResponse = await fetch(`${API_BASE_URL}/orderlineitems/transaction/${transactionID}`);
+    const orderItems = orderItemsResponse.ok ? await orderItemsResponse.json() : [];
+
+    if (orderItems.length === 0) {
+      alert('No order items found for this transaction');
+      return;
+    }
+
+    // Get current statuses
+    const statuses = orderItems.map(item => item.orderStatus);
+    const uniqueStatuses = [...new Set(statuses)];
+    const currentStatus = uniqueStatuses.length === 1 ? uniqueStatuses[0] : 'Mixed';
+
+    showUpdateStatusModal(transactionID, orderItems, currentStatus);
+  } catch (error) {
+    console.error('Error loading order items:', error);
+    alert('Error loading order details. Please try again.');
+  }
+};
+
+// Update status for a single order line item
+window.updateSingleOrderStatus = async function(orderID, copyID, currentStatus) {
+  try {
+    // Fetch the order item
+    const orderItemResponse = await fetch(`${API_BASE_URL}/orderlineitems/${orderID}`);
+    if (!orderItemResponse.ok) {
+      alert('Order item not found');
+      return;
+    }
+    const orderItem = await orderItemResponse.json();
+
+    showUpdateStatusModal(null, [orderItem], currentStatus);
+  } catch (error) {
+    console.error('Error loading order item:', error);
+    alert('Error loading order details. Please try again.');
+  }
+};
+
+// Show update status modal
+function showUpdateStatusModal(transactionID, orderItems, currentStatus) {
+  const isTransactionUpdate = transactionID !== null;
+  const title = isTransactionUpdate 
+    ? `Update Status for Transaction #${transactionID}` 
+    : `Update Status for Order #${orderItems[0].orderID}`;
+
+  const modalHTML = `
+    <div class="modal fade" id="updateStatusModal" tabindex="-1" aria-labelledby="updateStatusModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="updateStatusModalLabel">${title}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <p><strong>Current Status:</strong> <span class="badge bg-secondary">${escapeHtml(currentStatus)}</span></p>
+            <p><strong>Items Affected:</strong> ${orderItems.length} order line item(s)</p>
+            
+            <div class="mb-3">
+              <label for="newOrderStatus" class="form-label">New Status <span class="text-danger">*</span></label>
+              <select class="form-select" id="newOrderStatus" required>
+                <option value="">Select status...</option>
+                <option value="New" ${currentStatus === 'New' ? 'selected' : ''}>New</option>
+                <option value="Processing" ${currentStatus === 'Processing' ? 'selected' : ''}>Processing</option>
+                <option value="Fulfilled" ${currentStatus === 'Fulfilled' ? 'selected' : ''}>Fulfilled</option>
+                <option value="Cancelled" ${currentStatus === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+              </select>
+            </div>
+
+            <div class="alert alert-warning" id="cancellationWarning" style="display: none;">
+              <strong>⚠️ Cancellation Notice:</strong> Cancelling this order will restock all items back to inventory (change status to "In Store").
+            </div>
+
+            <div id="updateStatusMessage"></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="updateStatusSubmitBtn" 
+              data-transaction-id="${transactionID || ''}" 
+              data-order-ids="${orderItems.map(item => item.orderID).join(',')}">
+              Update Status
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Remove existing modal if any
+  const existingModal = document.getElementById('updateStatusModal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+
+  // Add modal to body
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+  // Initialize Bootstrap modal
+  const modalElement = document.getElementById('updateStatusModal');
+  const modal = new bootstrap.Modal(modalElement);
+  
+  // Show/hide cancellation warning
+  const statusSelect = document.getElementById('newOrderStatus');
+  const warningDiv = document.getElementById('cancellationWarning');
+  statusSelect.addEventListener('change', function() {
+    warningDiv.style.display = this.value === 'Cancelled' ? 'block' : 'none';
+  });
+  
+  // Setup submit button click handler
+  const submitBtn = document.getElementById('updateStatusSubmitBtn');
+  if (submitBtn) {
+    submitBtn.addEventListener('click', function() {
+      const transactionID = this.getAttribute('data-transaction-id') || null;
+      const orderIDsStr = this.getAttribute('data-order-ids');
+      const orderIDs = orderIDsStr ? orderIDsStr.split(',').map(id => parseInt(id.trim())) : [];
+      handleUpdateOrderStatus(transactionID, orderIDs);
+    });
+  }
+  
+  // Clean up modal when hidden
+  modalElement.addEventListener('hidden.bs.modal', function() {
+    modalElement.remove();
+  });
+  
+  modal.show();
+}
+
+// Handle update order status
+async function handleUpdateOrderStatus(transactionID, orderIDs) {
+  const messageDiv = document.getElementById('updateStatusMessage');
+  messageDiv.innerHTML = '';
+
+  const newStatus = document.getElementById('newOrderStatus').value;
+
+  if (!newStatus) {
+    messageDiv.innerHTML = '<div class="alert alert-danger">Please select a status.</div>';
+    return;
+  }
+
+  try {
+    const submitBtn = document.querySelector('#updateStatusModal .btn-primary');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Updating...';
+
+    // Update each order item
+    const copyIDsToRestock = [];
+    for (const orderID of orderIDs) {
+      // Fetch current order item
+      const orderItemResponse = await fetch(`${API_BASE_URL}/orderlineitems/${orderID}`);
+      if (!orderItemResponse.ok) {
+        throw new Error(`Failed to fetch order item ${orderID}`);
+      }
+      const orderItem = await orderItemResponse.json();
+
+      // If cancelling, track copy IDs for restocking
+      if (newStatus === 'Cancelled' && orderItem.orderStatus !== 'Cancelled') {
+        copyIDsToRestock.push(orderItem.copyID);
+      }
+
+      // Update order status
+      orderItem.orderStatus = newStatus;
+      const updateResponse = await fetch(`${API_BASE_URL}/orderlineitems/${orderID}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(orderItem)
+      });
+
+      if (!updateResponse.ok) {
+        const errorData = await updateResponse.json();
+        throw new Error(`Failed to update order ${orderID}: ${errorData.message || 'Unknown error'}`);
+      }
+    }
+
+    // If cancelling, restock inventory
+    if (newStatus === 'Cancelled' && copyIDsToRestock.length > 0) {
+      for (const copyID of copyIDsToRestock) {
+        try {
+          const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`);
+          if (copyResponse.ok) {
+            const copy = await copyResponse.json();
+            // Only restock if currently "Sold"
+            if (copy.copyStatus === 'Sold') {
+              copy.copyStatus = 'In Store';
+              await fetch(`${API_BASE_URL}/bookcopy/${copyID}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(copy)
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`Error restocking copy ${copyID}:`, error);
+        }
+      }
+    }
+
+    // Success - close modal and refresh
+    const modalElement = document.getElementById('updateStatusModal');
+    if (modalElement) {
+      const modal = bootstrap.Modal.getInstance(modalElement);
+      if (modal) {
+        modal.hide();
+      }
+    }
+
+    // Refresh the orders list or detail view
+    if (transactionID) {
+      // If we're on the order management page, refresh it
+      const orderManagementContainer = document.getElementById('adminOrdersContainer');
+      if (orderManagementContainer) {
+        await loadAdminOrders();
+      } else {
+        // If we're on the detail page, refresh it
+        await loadAdminOrderDetail(transactionID);
+      }
+    } else {
+      // If updating single item, refresh the detail view
+      if (orderIDs.length > 0) {
+        const orderItemResponse = await fetch(`${API_BASE_URL}/orderlineitems/${orderIDs[0]}`);
+        if (orderItemResponse.ok) {
+          const orderItem = await orderItemResponse.json();
+          await loadAdminOrderDetail(orderItem.transactionID);
+        }
+      }
+    }
+
+    alert(`Order status updated to "${newStatus}"${newStatus === 'Cancelled' ? ' and inventory restocked' : ''}!`);
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    messageDiv.innerHTML = `<div class="alert alert-danger">${escapeHtml(error.message || 'Error updating order status. Please try again.')}</div>`;
+  } finally {
+    const submitBtn = document.querySelector('#updateStatusModal .btn-primary');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Update Status';
+    }
+  }
+}
 
 window.showUserManagement = function() {
   addAdminHeader();
