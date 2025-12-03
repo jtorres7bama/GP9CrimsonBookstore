@@ -1500,7 +1500,7 @@ window.confirmPurchase = async function() {
         orderID: 0,
         transactionID: createdTransaction.transactionID,
         copyID: item.copyID,
-        orderStatus: 'Fulfilled',
+        orderStatus: 'New',
         staffID: randomStaff.staffID
       };
 
@@ -1517,14 +1517,14 @@ window.confirmPurchase = async function() {
         throw new Error(`Failed to create order for ${item.bookTitle}: ${errorData.message || 'Unknown error'}`);
       }
 
-      // Update copy status to "Sold"
+      // Update copy status to "Reserved" (will be changed to "Sold" when order is fulfilled)
       const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${item.copyID}`);
       if (!copyResponse.ok) {
         throw new Error(`Failed to fetch copy ${item.copyID}`);
       }
       const copy = await copyResponse.json();
 
-      copy.copyStatus = 'Sold';
+      copy.copyStatus = 'Reserved';
 
       const updateResponse = await fetch(`${API_BASE_URL}/bookcopy/${item.copyID}`, {
         method: 'PUT',
@@ -4699,6 +4699,7 @@ async function handleUpdateOrderStatus(transactionID, orderIDs) {
 
     // Update each order item
     const copyIDsToRestock = [];
+    const copyIDsToMarkSold = [];
     for (const orderID of orderIDs) {
       // Fetch current order item
       const orderItemResponse = await fetch(`${API_BASE_URL}/orderlineitems/${orderID}`);
@@ -4710,6 +4711,11 @@ async function handleUpdateOrderStatus(transactionID, orderIDs) {
       // If cancelling, track copy IDs for restocking
       if (newStatus === 'Cancelled' && orderItem.orderStatus !== 'Cancelled') {
         copyIDsToRestock.push(orderItem.copyID);
+      }
+
+      // If fulfilling, track copy IDs to mark as sold
+      if (newStatus === 'Fulfilled' && orderItem.orderStatus !== 'Fulfilled') {
+        copyIDsToMarkSold.push(orderItem.copyID);
       }
 
       // Update order status
@@ -4728,15 +4734,15 @@ async function handleUpdateOrderStatus(transactionID, orderIDs) {
       }
     }
 
-    // If cancelling, restock inventory
+    // If cancelling, restock inventory (change from Reserved/Sold back to In Store)
     if (newStatus === 'Cancelled' && copyIDsToRestock.length > 0) {
       for (const copyID of copyIDsToRestock) {
         try {
           const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`);
           if (copyResponse.ok) {
             const copy = await copyResponse.json();
-            // Only restock if currently "Sold"
-            if (copy.copyStatus === 'Sold') {
+            // Restock if currently "Reserved" or "Sold"
+            if (copy.copyStatus === 'Reserved' || copy.copyStatus === 'Sold') {
               copy.copyStatus = 'In Store';
               await fetch(`${API_BASE_URL}/bookcopy/${copyID}`, {
                 method: 'PUT',
@@ -4749,6 +4755,31 @@ async function handleUpdateOrderStatus(transactionID, orderIDs) {
           }
         } catch (error) {
           console.error(`Error restocking copy ${copyID}:`, error);
+        }
+      }
+    }
+
+    // If fulfilling, mark copies as sold
+    if (newStatus === 'Fulfilled' && copyIDsToMarkSold.length > 0) {
+      for (const copyID of copyIDsToMarkSold) {
+        try {
+          const copyResponse = await fetch(`${API_BASE_URL}/bookcopy/${copyID}`);
+          if (copyResponse.ok) {
+            const copy = await copyResponse.json();
+            // Mark as sold if currently "Reserved"
+            if (copy.copyStatus === 'Reserved') {
+              copy.copyStatus = 'Sold';
+              await fetch(`${API_BASE_URL}/bookcopy/${copyID}`, {
+                method: 'PUT',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(copy)
+              });
+            }
+          }
+        } catch (error) {
+          console.error(`Error marking copy ${copyID} as sold:`, error);
         }
       }
     }
