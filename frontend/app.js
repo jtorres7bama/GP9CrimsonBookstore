@@ -7,6 +7,9 @@ const app = document.getElementById('app');
 // Current user session
 let currentUser = null;
 
+// Current admin session
+let currentAdmin = null;
+
 // Shopping cart
 let shoppingCart = [];
 
@@ -31,7 +34,27 @@ function initializeApp() {
     }
   }
 
-  // Check if user is already logged in
+  // Check if admin is already logged in
+  const savedAdmin = sessionStorage.getItem('currentAdmin');
+  if (savedAdmin) {
+    try {
+      currentAdmin = JSON.parse(savedAdmin);
+      // Admin is logged in, show admin dashboard
+      showAdminDashboard();
+    } catch (error) {
+      console.error('Error parsing saved admin:', error);
+      sessionStorage.removeItem('currentAdmin');
+      // Check for customer session
+      checkCustomerSession();
+    }
+  } else {
+    // Check if customer is already logged in
+    checkCustomerSession();
+  }
+}
+
+// Check customer session
+function checkCustomerSession() {
   const savedUser = sessionStorage.getItem('currentUser');
   if (savedUser) {
     try {
@@ -53,6 +76,7 @@ function initializeApp() {
 function setupEventListeners() {
   const registerBtn = document.getElementById('registerBtn');
   const loginBtn = document.getElementById('loginBtn');
+  const adminLoginBtn = document.getElementById('adminLoginBtn');
 
   if (registerBtn) {
     registerBtn.addEventListener('click', showRegisterForm);
@@ -66,6 +90,13 @@ function setupEventListeners() {
     console.log('Login button listener attached');
   } else {
     console.error('Login button not found');
+  }
+
+  if (adminLoginBtn) {
+    adminLoginBtn.addEventListener('click', showAdminLoginForm);
+    console.log('Admin login button listener attached');
+  } else {
+    console.error('Admin login button not found');
   }
 }
 
@@ -187,9 +218,11 @@ window.logout = async function() {
 
 // Show landing page (global function for onclick handlers)
 window.showLandingPage = function() {
-  // Clear current user session if not already cleared
+  // Clear current user and admin sessions if not already cleared
   currentUser = null;
+  currentAdmin = null;
   sessionStorage.removeItem('currentUser');
+  sessionStorage.removeItem('currentAdmin');
   
   // Remove header
   removeHeader();
@@ -203,8 +236,10 @@ window.showLandingPage = function() {
             <h2 class="card-title mb-4">Welcome</h2>
             <p class="card-text text-muted mb-4">Please login or register to continue</p>
             <div class="d-grid gap-3">
-              <button type="button" class="btn btn-danger btn-lg" id="loginBtn">Login</button>
+              <button type="button" class="btn btn-danger btn-lg" id="loginBtn">Customer Login</button>
               <button type="button" class="btn btn-outline-danger btn-lg" id="registerBtn">Register</button>
+              <hr class="my-2">
+              <button type="button" class="btn btn-dark btn-lg" id="adminLoginBtn">Admin Login</button>
             </div>
           </div>
         </div>
@@ -376,6 +411,137 @@ async function handleLogin(e) {
       submitBtn.textContent = 'Login';
     }
   }
+}
+
+// Show admin login form
+function showAdminLoginForm() {
+  // Remove header if it exists
+  removeHeader();
+  
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-5">
+        <div class="card shadow">
+          <div class="card-body p-4">
+            <h2 class="card-title text-center mb-4">Admin Login</h2>
+            <form id="adminLoginForm">
+              <div class="mb-3">
+                <label for="adminEmail" class="form-label">Email</label>
+                <input type="email" class="form-control" id="adminEmail" required>
+              </div>
+              <div class="mb-3">
+                <label for="adminPassword" class="form-label">Password</label>
+                <input type="password" class="form-control" id="adminPassword" required>
+              </div>
+              <div id="adminLoginMessage"></div>
+              <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-dark btn-lg">Login</button>
+                <button type="button" class="btn btn-outline-secondary" onclick="showLandingPage()">Back</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Attach form handler
+  const form = document.getElementById('adminLoginForm');
+  form.addEventListener('submit', handleAdminLogin);
+}
+
+// Handle admin login form submission
+async function handleAdminLogin(e) {
+  e.preventDefault();
+
+  const messageDiv = document.getElementById('adminLoginMessage');
+  messageDiv.innerHTML = '';
+
+  // Get form values
+  const email = document.getElementById('adminEmail').value.trim();
+  const password = document.getElementById('adminPassword').value.trim();
+
+  // Validate inputs
+  if (!email || !password) {
+    showAdminLoginMessage('Please fill in all fields', 'danger');
+    return;
+  }
+
+  try {
+    // Show loading state
+    const submitBtn = document.querySelector('#adminLoginForm button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Logging in...';
+
+    // Get all staff to find matching email and password
+    let response;
+    try {
+      response = await fetch(`${API_BASE_URL}/staffs`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        mode: 'cors'
+      });
+    } catch (fetchError) {
+      // Network error or CORS issue
+      if (fetchError.name === 'TypeError' && fetchError.message.includes('fetch')) {
+        throw new Error('Failed to connect to server. Please make sure the API is running on http://localhost:5000 and CORS is configured correctly.');
+      }
+      throw fetchError;
+    }
+
+    let staffs;
+    try {
+      staffs = await response.json();
+    } catch (jsonError) {
+      throw new Error(`Server returned invalid response. Status: ${response.status}. Make sure the API is running on http://localhost:5000`);
+    }
+
+    if (response.ok) {
+      // Find staff with matching email and password
+      const staff = staffs.find(s => s.email === email && s.sPassword === password);
+
+      if (staff) {
+        // Login successful
+        currentAdmin = staff;
+        sessionStorage.setItem('currentAdmin', JSON.stringify(staff));
+        // Clear any customer session
+        currentUser = null;
+        sessionStorage.removeItem('currentUser');
+        showAdminDashboard();
+      } else {
+        showAdminLoginMessage('Invalid email or password', 'danger');
+      }
+    } else {
+      showAdminLoginMessage(`Server error: ${response.status}. ${staffs?.message || ''}`, 'danger');
+    }
+  } catch (error) {
+    console.error('Admin login error:', error);
+    let errorMsg = 'Error connecting to server. ';
+    if (error.message) {
+      errorMsg = error.message;
+    } else if (error.name === 'TypeError') {
+      errorMsg = 'Failed to connect to server. Please make sure the API is running on http://localhost:5000';
+    } else {
+      errorMsg += 'Please make sure the API is running on http://localhost:5000';
+    }
+    showAdminLoginMessage(errorMsg, 'danger');
+  } finally {
+    // Restore button state
+    const submitBtn = document.querySelector('#adminLoginForm button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Login';
+    }
+  }
+}
+
+// Show admin login message
+function showAdminLoginMessage(message, type) {
+  const messageDiv = document.getElementById('adminLoginMessage');
+  messageDiv.innerHTML = `<div class="alert alert-${type} alert-dismissible fade show" role="alert">${escapeHtml(message)}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>`;
 }
 
 // Store books data
@@ -1988,6 +2154,70 @@ function removeHeader() {
     `;
   }
 }
+
+// Add admin header ribbon
+window.addAdminHeader = function() {
+  // Remove existing header if any
+  removeHeader();
+  
+  const header = app.querySelector('header');
+  if (header) {
+    header.innerHTML = `
+      <div class="container">
+        <div class="d-flex justify-content-between align-items-center">
+          <h1 class="mb-0">Crimson Bookstore - Admin</h1>
+          <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-light" onclick="showAdminDashboard()">Admin Dashboard</button>
+            <button type="button" class="btn btn-outline-light" onclick="adminLogout()">Logout</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+};
+
+// Show admin dashboard
+window.showAdminDashboard = function() {
+  addAdminHeader();
+  
+  const mainContent = app.querySelector('main');
+  mainContent.innerHTML = `
+    <div class="container mt-4">
+      <div class="row">
+        <div class="col-12">
+          <h2 class="mb-4">Admin Dashboard</h2>
+          <p class="text-muted">Welcome, ${escapeHtml(currentAdmin.staffName)}!</p>
+          
+          <div class="row mt-4">
+            <div class="col-md-6 mb-3">
+              <div class="card">
+                <div class="card-body">
+                  <h5 class="card-title">Admin Information</h5>
+                  <p class="mb-1"><strong>Staff ID:</strong> ${currentAdmin.staffID}</p>
+                  <p class="mb-1"><strong>Name:</strong> ${escapeHtml(currentAdmin.staffName)}</p>
+                  <p class="mb-1"><strong>Email:</strong> ${escapeHtml(currentAdmin.email)}</p>
+                  <p class="mb-0"><strong>Created:</strong> ${new Date(currentAdmin.createdDate).toLocaleDateString()}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="alert alert-info mt-4">
+            <h5>Admin Features</h5>
+            <p class="mb-0">Admin functionality will be added here.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+};
+
+// Admin logout
+window.adminLogout = function() {
+  currentAdmin = null;
+  sessionStorage.removeItem('currentAdmin');
+  showLandingPage();
+};
 
 // Show login message
 function showLoginMessage(message, type) {
