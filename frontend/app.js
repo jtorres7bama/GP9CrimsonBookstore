@@ -2212,8 +2212,23 @@ window.showAdminDashboard = function() {
                 <div class="card h-100 shadow-sm" style="cursor: pointer;" onclick="showInventoryManagement()">
                   <div class="card-body text-center">
                     <h5 class="card-title">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="bi bi-box-seam mb-3" viewBox="0 0 16 16">
-                        <path d="M8.186 1.113a.5.5 0 0 0-.372 0L1.846 3.5l2.404.961L10.404 2l-2.218-.887zm3.564 1.426L8 4.706l-3.75 1.25v3.383l3.75-1.25 3.75 1.25V2.539zm3.25 4.5-3.75 1.25v3.383l3.75-1.25 3.75 1.25V7.039zm-4.5 1.5-3.75 1.25v3.383l3.75-1.25 3.75 1.25V8.539z"/>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" class="mb-3" viewBox="0 0 16 16">
+                        <!-- Book cover (left side) -->
+                        <path d="M2 2v12c0 .5.5 1 1 1h6V2H3c-.5 0-1 .5-1 1z" fill="currentColor" opacity="0.9"/>
+                        <!-- Book pages (right side, slightly open) -->
+                        <path d="M9 2v12h4c.5 0 1-.5 1-1V3c0-.5-.5-1-1-1H9z" fill="white" stroke="currentColor" stroke-width="0.5"/>
+                        <!-- Page lines inside -->
+                        <line x1="10" y1="4" x2="12" y2="4" stroke="currentColor" stroke-width="0.3" opacity="0.5"/>
+                        <line x1="10" y1="5.5" x2="12.5" y2="5.5" stroke="currentColor" stroke-width="0.3" opacity="0.5"/>
+                        <line x1="10" y1="7" x2="12" y2="7" stroke="currentColor" stroke-width="0.3" opacity="0.5"/>
+                        <line x1="10" y1="8.5" x2="12.5" y2="8.5" stroke="currentColor" stroke-width="0.3" opacity="0.5"/>
+                        <line x1="10" y1="10" x2="12" y2="10" stroke="currentColor" stroke-width="0.3" opacity="0.5"/>
+                        <!-- Title scribbles on cover -->
+                        <path d="M3 3.5 Q3.5 3 4 3.5 T5 3.5" stroke="white" stroke-width="0.8" fill="none"/>
+                        <path d="M3 5 Q3.5 4.5 4 5 T5 5" stroke="white" stroke-width="0.8" fill="none"/>
+                        <path d="M3 6.5 Q3.5 6 4 6.5 T5 6.5" stroke="white" stroke-width="0.8" fill="none"/>
+                        <!-- Book binding/spine -->
+                        <rect x="2" y="2" width="1" height="12" fill="currentColor" opacity="0.7"/>
                       </svg>
                     </h5>
                     <h5 class="card-title">Inventory Management</h5>
