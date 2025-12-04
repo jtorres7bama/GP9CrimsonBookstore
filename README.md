@@ -1,5 +1,5 @@
 # GP9CrimsonBookstore
-By Javier Torres (Main Programmer), Hai Hoang, Aiden Bulloch, Monroe Tribble
+By Javier Torres (Main Programmer), Hai Hoang (Main Database Designer), Aiden Bulloch, Monroe Tribble
 
 ## To Run Website
 1. cd into the over all api folder, run "dotnet run"

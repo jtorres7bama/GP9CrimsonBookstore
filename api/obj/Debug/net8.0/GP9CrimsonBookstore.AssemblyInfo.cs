@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("GP9CrimsonBookstore")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6c68bac3a69ee74804db18025c2c20640a343ba4")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f51a5f786b45445e8b1ff0f694653599373631fc")]
 [assembly: System.Reflection.AssemblyProductAttribute("GP9CrimsonBookstore")]
 [assembly: System.Reflection.AssemblyTitleAttribute("GP9CrimsonBookstore")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

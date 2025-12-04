@@ -412,5 +412,5 @@ INSERT INTO OrderLineItems (TransactionID, CopyID, OrderStatus, StaffID) VALUES
 (21,37,'Fulfilled',10),
 (22,38,'Fulfilled',9),
 (23,35,'Fulfilled',8),
-(24,40,'FUlfilled',8)
+(24,41,'Fulfilled',8)
 ;
